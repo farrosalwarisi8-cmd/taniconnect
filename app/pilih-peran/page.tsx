@@ -52,7 +52,6 @@ function PilihPeranContent() {
 
     setLoading(true)
     try {
-      // Update role di profile
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Session tidak ditemukan')
 
@@ -63,7 +62,6 @@ function PilihPeranContent() {
 
       if (profileError) throw profileError
 
-      // Update juga di auth.users metadata (untuk middleware)
       const { error: authError } = await supabase.auth.updateUser({
         data: { role: selectedRole },
       })
@@ -120,7 +118,6 @@ function PilihPeranContent() {
                     : 'border-border hover:border-primary-light hover:shadow-md',
                 )}
               >
-                {/* Border kiri hijau khusus Petani */}
                 {role.value === 'petani' && !isSelected && (
                   <div className="w-1 h-16 bg-primary rounded-full mb-4 -ml-6" />
                 )}

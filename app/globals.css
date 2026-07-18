@@ -15,9 +15,7 @@
   }
 
   html {
-    /* Scroll behavior smooth untuk navigasi anchor */
     scroll-behavior: smooth;
-    /* Cegah font size inflation di iOS + standard property */
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
   }
@@ -26,15 +24,12 @@
     font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
     font-size: 17px;
     line-height: 28.9px;
-    /* ATURAN: Jangan gunakan pure black untuk body text */
     color: #374151;
     background-color: #FFFFFF;
-    /* Rendering font lebih halus */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Pastikan semua interactive element punya min touch target 48px */
   button,
   [role="button"],
   a,
@@ -44,37 +39,31 @@
     min-height: 48px;
   }
 
-  /* Override untuk elemen kecil yang memang disengaja (icon button, badge) */
   .touch-target-exempt {
     min-height: unset;
   }
 
-  /* Focus visible untuk aksesibilitas keyboard */
   :focus-visible {
     outline: 3px solid rgba(74, 222, 128, 0.6);
     outline-offset: 2px;
     border-radius: 4px;
   }
 
-  /* Sembunyikan outline default, tapi tampilkan focus-visible */
   :focus:not(:focus-visible) {
     outline: none;
   }
 
-  /* Heading default */
   h1, h2, h3, h4, h5, h6 {
     font-weight: 700;
     color: #111827;
     line-height: 1.3;
   }
 
-  /* Link default */
   a {
     color: inherit;
     text-decoration: none;
   }
 
-  /* Image default */
   img, video {
     max-width: 100%;
     height: auto;
@@ -85,9 +74,12 @@
 /* ─── KOMPONEN UTILITIES ─────────────────────────────────── */
 @layer components {
 
-  /* Loading Skeleton shimmer */
+  /* Loading Skeleton shimmer — pakai CSS biasa (bukan @apply) */
   .skeleton {
-    @apply rounded-lg bg-surface-light relative overflow-hidden;
+    border-radius: 8px;
+    background-color: #F9FAFB;
+    position: relative;
+    overflow: hidden;
   }
 
   .skeleton::after {
@@ -105,7 +97,6 @@
   }
 
   /* Nav bar blur glass effect */
-  /* PENTING: -webkit-backdrop-filter HARUS ditulis SEBELUM backdrop-filter */
   .nav-glass {
     background: rgba(255, 255, 255, 0.88);
     -webkit-backdrop-filter: blur(12px);
@@ -130,7 +121,6 @@
     line-height: 83.6px;
   }
 
-  /* Responsive display text */
   @media (max-width: 639px) {
     .text-display {
       font-size: 40px;
@@ -138,13 +128,21 @@
     }
   }
 
-  /* Status chip base */
+  /* Status chip — pakai CSS biasa untuk hindari masalah @apply */
   .chip {
-    @apply inline-flex items-center gap-1 px-[10px] py-1 rounded-full text-caption font-medium;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 500;
   }
 
   .chip-success {
-    @apply bg-green-100 text-green-700;
+    background-color: #DCFCE7;
+    color: #15803D;
   }
 
   .chip-warning {
@@ -153,7 +151,8 @@
   }
 
   .chip-info {
-    @apply bg-blue-50 text-blue-700;
+    background-color: #EFF6FF;
+    color: #1D4ED8;
   }
 
   .chip-error {
@@ -167,11 +166,25 @@
   }
 }
 
+/* ─── ANIMATIONS ─────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+@keyframes slide_in_right {
+  0%   { transform: translateX(100%); opacity: 0; }
+  100% { transform: translateX(0);    opacity: 1; }
+}
+
+@keyframes pulse_dot {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%      { opacity: 0.5; transform: scale(0.85); }
+}
+
 /* ─── CUSTOM UTILITIES ───────────────────────────────────── */
 @layer utilities {
-  /* Scrollbar tersembunyi (untuk horizontal scroll chip)
-     Note: scrollbar-width supported di Chrome 121+, Firefox, Safari 18.2+.
-     Untuk browser lama, ::-webkit-scrollbar { display: none } menjadi fallback. */
+  /* Scrollbar tersembunyi */
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
@@ -181,8 +194,7 @@
     display: none;
   }
 
-  /* Clamp teks untuk card — 2 baris maksimum
-     Vendor prefix + standard property untuk kompatibilitas penuh */
+  /* Clamp teks untuk card */
   .line-clamp-2 {
     display: -webkit-box;
     -webkit-line-clamp: 2;

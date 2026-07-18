@@ -30,7 +30,8 @@ export function RegisterStep3({ onBack, onComplete, loading }: RegisterStep3Prop
   ): boolean => {
     const result = ktpUploadSchema.safeParse({ file })
     if (!result.success) {
-      toast(result.error.errors[0].message, 'error')
+      // Zod v4: pakai .issues bukan .errors
+      toast(result.error.issues[0].message, 'error')
       return false
     }
 

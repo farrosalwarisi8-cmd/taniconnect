@@ -1,5 +1,6 @@
 import { createAdminSupabaseClient } from './supabase/server'
 import { headers } from 'next/headers'
+import type { TablesInsert } from './supabase/client'
 
 interface AuditLogInput {
   actor_id?:      string | null
@@ -13,13 +14,7 @@ interface AuditLogInput {
 }
 
 /**
- * Insert audit log — WAJIB untuk aksi sensitif:
- * - Perubahan status escrow
- * - Verifikasi/tolak KYC
- * - Keputusan dispute
- * - Login gagal berulang
- *
- * Menggunakan Admin client karena audit_logs tidak punya INSERT policy.
+ * Insert audit log — WAJIB untuk aksi sensitif.
  */
 export async function logAudit(input: AuditLogInput) {
   try {
@@ -33,7 +28,7 @@ export async function logAudit(input: AuditLogInput) {
 
     const userAgent = headersList.get('user-agent') ?? null
 
-    await supabase.from('audit_logs').insert({
+    const insertData: TablesInsert<'audit_logs'> = {
       actor_id:      input.actor_id ?? null,
       actor_role:    input.actor_role ?? null,
       action:        input.action,
@@ -44,10 +39,10 @@ export async function logAudit(input: AuditLogInput) {
       ip_address:    ip,
       user_agent:    userAgent,
       notes:         input.notes ?? null,
-    })
+    }
+
+    await supabase.from('audit_logs').insert(insertData)
   } catch (err) {
-    // Audit log tidak boleh menggagalkan operasi utama —
-    // hanya log ke console jika gagal
     console.error('[AUDIT LOG FAILED]', err)
   }
 }

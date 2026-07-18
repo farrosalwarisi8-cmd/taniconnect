@@ -5,13 +5,36 @@ import { Badge } from '@/components/ui/Badge'
 import { formatRupiah, formatDateID, TRANSACTION_STATUS_LABELS } from '@/lib/utils'
 import { ConfirmReceivedButton } from './_components/ConfirmReceivedButton'
 
+type TransactionWithRelations = {
+  id: string
+  created_at: string
+  status: string
+  escrow_status: string
+  quantity: number
+  total_amount: number
+  product: {
+    id: string
+    name: string
+    image_paths: string[]
+    unit: string
+  } | Array<{
+    id: string
+    name: string
+    image_paths: string[]
+    unit: string
+  }> | null
+  seller: {
+    full_name: string
+  } | Array<{ full_name: string }> | null
+}
+
 export default async function PesananPage() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) redirect('/login?redirect=/pembeli/pesanan')
 
-  const { data: transactions } = await supabase
+  const { data } = await supabase
     .from('transactions')
     .select(`
       id, created_at, status, escrow_status, quantity, total_amount,
@@ -21,7 +44,7 @@ export default async function PesananPage() {
     .eq('buyer_id', user.id)
     .order('created_at', { ascending: false })
 
-  const list = transactions ?? []
+  const list = (data ?? []) as unknown as TransactionWithRelations[]
 
   return (
     <main className="min-h-screen bg-surface-light pb-24">
@@ -68,13 +91,11 @@ export default async function PesananPage() {
 
           return (
             <div key={tx.id} className="bg-white rounded-DEFAULT border border-border p-4 sm:p-6 space-y-4">
-              {/* Header */}
               <div className="flex items-center justify-between text-caption text-fg/60">
                 <span>ID: {tx.id.slice(0, 8).toUpperCase()}</span>
                 <span>{formatDateID(tx.created_at)}</span>
               </div>
 
-              {/* Produk */}
               <div className="flex gap-4">
                 <div className="w-16 h-16 rounded-sm bg-surface-light shrink-0 overflow-hidden">
                   {imageUrl ? (
@@ -92,11 +113,9 @@ export default async function PesananPage() {
                 </div>
               </div>
 
-              {/* Status */}
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
                 <Badge variant={statusInfo.variant} size="md">{statusInfo.label}</Badge>
 
-                {/* Aksi konfirmasi penerimaan (hanya jika status delivered) */}
                 {tx.status === 'delivered' && tx.escrow_status === 'held' && (
                   <ConfirmReceivedButton transactionId={tx.id} />
                 )}

@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createAdminSupabaseClient } from '@/lib/supabase/server'
 import { logAudit } from '@/lib/audit'
+import type { Tables, TablesInsert, TablesUpdate } from '@/lib/supabase/client'
 
-/**
- * Konfirmasi barang diterima oleh pembeli.
- *
- * CRITICAL: Escrow release HANYA di server dengan Admin client.
- * Client tidak boleh mengubah escrow_status langsung (dilindungi RLS).
- */
+type TransactionWithProduct = {
+  quantity: number
+  price_per_unit: number
+  product: {
+    name: string
+    unit: string
+  } | Array<{ name: string; unit: string }> | null
+}
+
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -23,12 +27,15 @@ export async function POST(
 
   const admin = createAdminSupabaseClient()
 
-  // Ambil transaksi & validasi
-  const { data: tx, error } = await admin
+  const { data: txData, error } = await admin
     .from('transactions')
     .select('id, buyer_id, seller_id, status, escrow_status, total_amount')
     .eq('id', transactionId)
     .single()
+
+  const tx = txData as Pick<Tables<'transactions'>,
+    'id' | 'buyer_id' | 'seller_id' | 'status' | 'escrow_status' | 'total_amount'
+  > | null
 
   if (error || !tx) {
     return NextResponse.json({ error: 'Transaksi tidak ditemukan' }, { status: 404 })
@@ -38,7 +45,6 @@ export async function POST(
     return NextResponse.json({ error: 'Bukan transaksimu' }, { status: 403 })
   }
 
-  // Boleh konfirmasi jika status: paid, processed, shipped, delivered
   const allowedStatuses = ['paid', 'processed', 'shipped', 'delivered']
   if (!allowedStatuses.includes(tx.status)) {
     return NextResponse.json(
@@ -54,49 +60,54 @@ export async function POST(
     )
   }
 
-  // Update: complete + release escrow
   const now = new Date().toISOString()
+
+  const updatePayload: TablesUpdate<'transactions'> = {
+    status:             'completed',
+    escrow_status:      'released',
+    escrow_released_at: now,
+    confirmed_at:       now,
+  }
+
   const { error: updateError } = await admin
     .from('transactions')
-    .update({
-      status:             'completed',
-      escrow_status:      'released',
-      escrow_released_at: now,
-      confirmed_at:       now,
-    })
+    .update(updatePayload)
     .eq('id', transactionId)
 
   if (updateError) {
     return NextResponse.json({ error: 'Gagal update status' }, { status: 500 })
   }
 
-  // Auto-create financial record untuk penjual (income)
-  // Ini yang membuat dashboard keuangan petani auto-sync dengan penjualan
-  const { data: product } = await admin
+  // Auto-create financial_record untuk penjual
+  const { data: prodQueryData } = await admin
     .from('transactions')
     .select('quantity, price_per_unit, product:products!transactions_product_id_fkey(name, unit)')
     .eq('id', transactionId)
     .single()
 
-  if (product) {
-    const prodData = Array.isArray(product.product) ? product.product[0] : product.product
-    await admin.from('financial_records').insert({
+  const prodQuery = prodQueryData as unknown as TransactionWithProduct | null
+
+  if (prodQuery) {
+    const prodData = Array.isArray(prodQuery.product) ? prodQuery.product[0] : prodQuery.product
+
+    const financialInsert: TablesInsert<'financial_records'> = {
       farmer_id:      tx.seller_id,
       season_label:   `Musim ${new Date().getFullYear()}`,
       season_year:    new Date().getFullYear(),
       record_type:    'income',
       category:       'penjualan',
       item_name:      prodData?.name ?? 'Penjualan',
-      quantity:       product.quantity,
+      quantity:       prodQuery.quantity,
       unit:           prodData?.unit ?? 'kg',
-      price_per_unit: product.price_per_unit,
+      price_per_unit: prodQuery.price_per_unit,
       transaction_id: transactionId,
       recorded_at:    now.split('T')[0],
       notes:          'Otomatis dari marketplace',
-    })
+    }
+
+    await admin.from('financial_records').insert(financialInsert)
   }
 
-  // Audit log
   await logAudit({
     actor_id:      user.id,
     actor_role:    'pembeli',

@@ -50,7 +50,12 @@ function CheckoutFlow(props: Props) {
   const [user, setUser] = useState<{ id: string } | null>(null)
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user ? { id: data.user.id } : null))
+    // Load user (async/await pattern supaya TypeScript happy)
+    const loadUser = async () => {
+      const { data } = await supabase.auth.getUser()
+      setUser(data.user ? { id: data.user.id } : null)
+    }
+    loadUser()
 
     // Load Midtrans Snap script
     const scriptId = 'midtrans-snap-script'
@@ -104,7 +109,7 @@ function CheckoutFlow(props: Props) {
         throw new Error(err.error ?? 'Gagal membuat transaksi')
       }
 
-      const { snap_token, transaction_id } = await res.json()
+      const { snap_token } = await res.json()
 
       // Buka Midtrans Snap popup
       window.snap.pay(snap_token, {

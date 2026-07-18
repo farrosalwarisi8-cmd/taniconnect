@@ -4,6 +4,7 @@ import { midtransSnap } from '@/lib/midtrans'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
 import { z } from 'zod'
+import type { Tables, TablesInsert } from '@/lib/supabase/client'
 
 const bodySchema = z.object({
   product_id:      z.string().uuid(),
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // ─── 2. RATE LIMIT (per user, max 10 req/menit) ───────────
+    // ─── 2. RATE LIMIT ────────────────────────────────────────
     const rate = checkRateLimit({
       key:         `create-tx:${user.id}`,
       maxRequests: 10,
@@ -35,26 +36,30 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ─── 3. IDEMPOTENCY CHECK ──────────────────────────────────
+    // ─── 3. IDEMPOTENCY CHECK ─────────────────────────────────
     const idempotencyKey = req.headers.get('x-idempotency-key')
     if (!idempotencyKey) {
       return NextResponse.json({ error: 'Missing idempotency key' }, { status: 400 })
     }
 
     const admin = createAdminSupabaseClient()
-    const { data: existing } = await admin
+
+    const { data: existingData } = await admin
       .from('transactions')
       .select('id')
       .eq('idempotency_key', idempotencyKey)
       .maybeSingle()
 
+    const existing = existingData as Pick<Tables<'transactions'>, 'id'> | null
+
     if (existing) {
-      // Ambil snap token dari payment yang sudah ada
-      const { data: payment } = await admin
+      const { data: paymentData } = await admin
         .from('payments')
         .select('snap_token')
         .eq('transaction_id', existing.id)
         .maybeSingle()
+
+      const payment = paymentData as Pick<Tables<'payments'>, 'snap_token'> | null
 
       if (payment?.snap_token) {
         return NextResponse.json({
@@ -65,22 +70,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ─── 4. VALIDATE BODY ──────────────────────────────────────
+    // ─── 4. VALIDATE BODY ─────────────────────────────────────
     const body = await req.json()
     const parsed = bodySchema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Input tidak valid', details: parsed.error.errors },
+        { error: 'Input tidak valid', details: parsed.error.issues },
         { status: 400 }
       )
     }
 
-    // ─── 5. AMBIL DATA PRODUK & VALIDASI ──────────────────────
-    const { data: product, error: productError } = await admin
+    // ─── 5. AMBIL DATA PRODUK ─────────────────────────────────
+    const { data: productData, error: productError } = await admin
       .from('products')
       .select('id, name, price_per_unit, unit, stock_quantity, seller_id, status')
       .eq('id', parsed.data.product_id)
       .single()
+
+    const product = productData as Pick<Tables<'products'>,
+      'id' | 'name' | 'price_per_unit' | 'unit' | 'stock_quantity' | 'seller_id' | 'status'
+    > | null
 
     if (productError || !product) {
       return NextResponse.json({ error: 'Produk tidak ditemukan' }, { status: 404 })
@@ -106,24 +115,28 @@ export async function POST(req: NextRequest) {
     const totalAmount = subtotal + parsed.data.shipping_cost
 
     // ─── 7. INSERT TRANSACTION ────────────────────────────────
-    const { data: transaction, error: txError } = await admin
+    const txInsert: TablesInsert<'transactions'> = {
+      buyer_id:         user.id,
+      seller_id:        product.seller_id,
+      product_id:       product.id,
+      quantity:         parsed.data.quantity,
+      price_per_unit:   product.price_per_unit,
+      subtotal,
+      shipping_cost:    parsed.data.shipping_cost,
+      total_amount:     totalAmount,
+      shipping_method:  parsed.data.shipping_method,
+      status:           'pending',
+      escrow_status:    'held',
+      idempotency_key:  idempotencyKey,
+    }
+
+    const { data: txData, error: txError } = await admin
       .from('transactions')
-      .insert({
-        buyer_id:         user.id,
-        seller_id:        product.seller_id,
-        product_id:       product.id,
-        quantity:         parsed.data.quantity,
-        price_per_unit:   product.price_per_unit,
-        subtotal,
-        shipping_cost:    parsed.data.shipping_cost,
-        total_amount:     totalAmount,
-        shipping_method:  parsed.data.shipping_method,
-        status:           'pending',
-        escrow_status:    'held',
-        idempotency_key:  idempotencyKey,
-      })
+      .insert(txInsert)
       .select()
       .single()
+
+    const transaction = txData as Tables<'transactions'> | null
 
     if (txError || !transaction) {
       console.error('[TX INSERT ERROR]', txError)
@@ -167,14 +180,16 @@ export async function POST(req: NextRequest) {
 
     const snapResponse = await midtransSnap.createTransaction(snapPayload)
 
-    // ─── 9. INSERT PAYMENT RECORD ─────────────────────────────
-    const { error: paymentError } = await admin.from('payments').insert({
+    // ─── 9. INSERT PAYMENT ────────────────────────────────────
+    const paymentInsert: TablesInsert<'payments'> = {
       transaction_id:    transaction.id,
       midtrans_order_id: orderId,
       amount:            totalAmount,
       status:            'pending',
       snap_token:        snapResponse.token,
-    })
+    }
+
+    const { error: paymentError } = await admin.from('payments').insert(paymentInsert)
 
     if (paymentError) {
       console.error('[PAYMENT INSERT ERROR]', paymentError)
@@ -183,7 +198,7 @@ export async function POST(req: NextRequest) {
     // ─── 10. AUDIT LOG ────────────────────────────────────────
     await logAudit({
       actor_id:      user.id,
-      actor_role:    (user.user_metadata?.role as any) ?? null,
+      actor_role:    (user.user_metadata?.role as 'petani' | 'pembeli' | 'penyedia_alat' | 'admin') ?? null,
       action:        'transaction.created',
       resource_type: 'transaction',
       resource_id:   transaction.id,

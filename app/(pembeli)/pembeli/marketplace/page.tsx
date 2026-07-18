@@ -47,7 +47,7 @@ async function ProductGridWrapper({ searchParams }: { searchParams: SearchParams
     query = query.ilike('name', `%${searchParams.q}%`)
   }
   if (searchParams.category && searchParams.category !== 'semua') {
-    query = query.eq('category', searchParams.category as any)
+    query = query.eq('category', searchParams.category as 'sayuran' | 'buah' | 'beras_padi' | 'rempah' | 'lainnya')
   }
   if (searchParams.province) {
     query = query.eq('province', searchParams.province)
@@ -74,5 +74,5 @@ async function ProductGridWrapper({ searchParams }: { searchParams: SearchParams
     )
   }
 
-  return <ProductGrid products={products ?? []} />
+  return <ProductGrid products={(products as any) ?? []} />
 }

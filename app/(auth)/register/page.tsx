@@ -45,9 +45,6 @@ function RegisterFlow() {
     setLoading(true)
     try {
       const phone = normalizePhoneID(state.step1.phone)
-
-      // Supabase Auth: sign up dengan phone-based email trick
-      // (karena Supabase butuh email format, kita gunakan phone@taniconnect.local)
       const pseudoEmail = `${phone.replace('+', '')}@taniconnect.local`
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -57,7 +54,6 @@ function RegisterFlow() {
           data: {
             full_name: state.step1.fullName,
             phone,
-            // Role default 'pembeli', bisa diubah setelah onboarding
             role: 'pembeli',
           },
         },
@@ -68,7 +64,7 @@ function RegisterFlow() {
 
       const userId = authData.user.id
 
-      // Upload KTP ke bucket privat
+      // Upload KTP
       const ktpExt = ktpFile.name.split('.').pop()
       const ktpPath = `${userId}/ktp-${Date.now()}.${ktpExt}`
       const { error: ktpUploadError } = await supabase.storage
@@ -79,7 +75,6 @@ function RegisterFlow() {
         })
       if (ktpUploadError) throw ktpUploadError
 
-      // Upload foto lahan (opsional)
       let landPath: string | null = null
       if (landPhotoFile) {
         const landExt = landPhotoFile.name.split('.').pop()
@@ -92,18 +87,20 @@ function RegisterFlow() {
           })
       }
 
-      // Update profile dengan data lokasi + KYC paths
+      // Update profile
+      const profileUpdate = {
+        province:                state.step2.province,
+        city:                    state.step2.city,
+        district:                state.step2.district,
+        address:                 state.step2.address,
+        ktp_storage_path:        ktpPath,
+        land_photo_storage_path: landPath,
+        kyc_submitted_at:        new Date().toISOString(),
+      }
+
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({
-          province:                state.step2.province,
-          city:                    state.step2.city,
-          district:                state.step2.district,
-          address:                 state.step2.address,
-          ktp_storage_path:        ktpPath,
-          land_photo_storage_path: landPath,
-          kyc_submitted_at:        new Date().toISOString(),
-        })
+        .update(profileUpdate)
         .eq('id', userId)
 
       if (profileError) throw profileError
@@ -126,7 +123,6 @@ function RegisterFlow() {
 
   return (
     <main className="min-h-screen bg-white flex flex-col">
-      {/* Header */}
       <header className="px-6 py-4 border-b border-border flex items-center justify-between">
         <Link href="/" className="text-primary-dark font-semibold text-lg min-h-0" style={{ fontFamily: "'Bricolage Grotesque', ui-sans-serif" }}>
           🌿 TaniConnect
@@ -136,12 +132,10 @@ function RegisterFlow() {
         </Link>
       </header>
 
-      {/* Progress indicator */}
       <div className="px-6 py-6 border-b border-border bg-surface-light">
         <StepIndicator currentStep={currentStep} totalSteps={3} />
       </div>
 
-      {/* Konten */}
       <div className="flex-1 px-6 py-8 max-w-md mx-auto w-full">
         {currentStep === 1 && (
           <RegisterStep1

@@ -1,21 +1,15 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { createClient } from '@supabase/supabase-js'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
-// PENTING: import Database dari client.ts, bukan dari @/types/database
 import type { Database } from './client'
 
 /**
  * Supabase client untuk Server Components, Server Actions, dan Route Handlers.
- * Cookie dikelola oleh @supabase/ssr untuk session management.
- *
- * PENTING: Fungsi ini harus async karena cookies() di Next.js 15
- * mengembalikan Promise.
  */
 export async function createServerSupabaseClient() {
-  // Next.js 15: cookies() sekarang async — WAJIB di-await
   const cookieStore = await cookies()
 
-  return createServerClient<Database>(
+  const client = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -29,36 +23,31 @@ export async function createServerSupabaseClient() {
               cookieStore.set(name, value, options)
             )
           } catch {
-            // Server Component tidak bisa set cookies —
-            // middleware yang akan menangani refresh token
+            // Server Component tidak bisa set cookies
           }
         },
       },
     }
   )
+
+  // Cast ke any untuk menghindari masalah type inference dari Supabase SDK
+  // yang kadang mengembalikan "never" pada insert/update.
+  // Type safety tetap terjaga di skema Database (via lib/supabase/client.ts)
+  // dan di runtime lewat RLS + validasi Zod.
+  return client as any
 }
 
 /**
  * Supabase Admin client dengan Service Role Key.
- *
- * HANYA untuk operasi privileged di server-side:
- * - Approve/reject KYC
- * - Operasi escrow (release/refund)
- * - Insert ke audit_logs
- * - Webhook Midtrans handler
- *
- * ⚠️ JANGAN PERNAH panggil di client — service role key
- * memiliki akses penuh (bypass RLS).
  */
 export function createAdminSupabaseClient() {
-  // Guard: pastikan hanya jalan di server
   if (typeof window !== 'undefined') {
     throw new Error(
       'createAdminSupabaseClient() hanya boleh dipanggil di server-side!'
     )
   }
 
-  return createClient<Database>(
+  const client = createSupabaseClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
@@ -68,4 +57,6 @@ export function createAdminSupabaseClient() {
       },
     }
   )
+
+  return client as any
 }

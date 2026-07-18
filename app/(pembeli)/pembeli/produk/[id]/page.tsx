@@ -9,11 +9,40 @@ interface Props {
   params: Promise<{ id: string }>
 }
 
+// Type manual untuk hasil query dengan join
+type SellerData = {
+  id: string
+  full_name: string
+  city: string | null
+  rating_avg: number | null
+  rating_count: number | null
+  is_verified: boolean
+}
+
+type ProductWithSeller = {
+  id: string
+  name: string
+  category: 'sayuran' | 'buah' | 'beras_padi' | 'rempah' | 'lainnya'
+  description: string | null
+  price_per_unit: number
+  unit: string
+  stock_quantity: number
+  image_paths: string[]
+  province: string | null
+  city: string | null
+  is_auction: boolean
+  current_bid: number | null
+  auction_end_time: string | null
+  harvest_date: string | null
+  seller_id: string
+  seller: SellerData | SellerData[] | null
+}
+
 export default async function ProductDetailPage({ params }: Props) {
   const { id } = await params
   const supabase = await createServerSupabaseClient()
 
-  const { data: product, error } = await supabase
+  const { data, error } = await supabase
     .from('products')
     .select(`
       id, name, category, description, price_per_unit, unit, stock_quantity,
@@ -27,12 +56,13 @@ export default async function ProductDetailPage({ params }: Props) {
     .eq('status', 'active')
     .single()
 
+  const product = data as ProductWithSeller | null
   if (error || !product) notFound()
 
   const seller = Array.isArray(product.seller) ? product.seller[0] : product.seller
 
   const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const images = (product.image_paths || []).map(p =>
+  const images = (product.image_paths || []).map((p: string) =>
     p.startsWith('http')
       ? p
       : `${SUPABASE_URL}/storage/v1/object/public/product-images/${p}`
@@ -40,7 +70,6 @@ export default async function ProductDetailPage({ params }: Props) {
 
   return (
     <main className="min-h-screen bg-white pb-32 sm:pb-8">
-      {/* Header dengan back button */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-nav border-b border-border">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link
@@ -69,7 +98,6 @@ export default async function ProductDetailPage({ params }: Props) {
         </div>
       </header>
 
-      {/* Gambar hero */}
       <div className="relative aspect-square sm:aspect-video bg-surface-light">
         {images[0] ? (
           <img src={images[0]} alt={product.name} className="w-full h-full object-cover" />
@@ -84,7 +112,6 @@ export default async function ProductDetailPage({ params }: Props) {
         )}
       </div>
 
-      {/* Info produk */}
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         <div>
           <div className="flex items-center gap-2 mb-2">
@@ -111,7 +138,6 @@ export default async function ProductDetailPage({ params }: Props) {
           )}
         </div>
 
-        {/* Info penjual */}
         {seller && (
           <div className="bg-surface-light rounded-sm p-4 flex items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-primary-light text-primary-dark flex items-center justify-center font-semibold shrink-0">
@@ -127,7 +153,6 @@ export default async function ProductDetailPage({ params }: Props) {
           </div>
         )}
 
-        {/* Deskripsi */}
         {product.description && (
           <div>
             <h2 className="text-h2 text-fg-dark mb-2">Tentang Produk</h2>
@@ -135,7 +160,6 @@ export default async function ProductDetailPage({ params }: Props) {
           </div>
         )}
 
-        {/* Client Component: form pembelian + Midtrans Snap */}
         <CheckoutClient
           productId={product.id}
           productName={product.name}

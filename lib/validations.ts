@@ -40,9 +40,10 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Password wajib diisi'),
 })
 
+// Zod v4: pakai { message } bukan { errorMap }
 export const roleSchema = z.object({
   role: z.enum(['petani', 'pembeli', 'penyedia_alat'], {
-    errorMap: () => ({ message: 'Pilih peran' }),
+    message: 'Pilih peran yang valid',
   }),
 })
 
@@ -68,6 +69,7 @@ export const createTransactionSchema = z.object({
   product_id:      z.string().uuid('ID produk tidak valid'),
   quantity:        z.number().positive('Jumlah harus lebih dari 0'),
   shipping_method: z.enum(['jne', 'sicepat', 'ambil_sendiri']),
+  shipping_cost:   z.number().nonnegative(),
   shipping_address: z.object({
     recipient_name: z.string().min(3),
     phone:          z.string(),
@@ -110,9 +112,9 @@ export const ktpUploadSchema = z.object({
     ),
 })
 
-export type RegisterStep1Input   = z.infer<typeof registerStep1Schema>
-export type RegisterStep2Input   = z.infer<typeof registerStep2Schema>
-export type LoginInput           = z.infer<typeof loginSchema>
-export type ProductCreateInput   = z.infer<typeof productCreateSchema>
+export type RegisterStep1Input     = z.infer<typeof registerStep1Schema>
+export type RegisterStep2Input     = z.infer<typeof registerStep2Schema>
+export type LoginInput             = z.infer<typeof loginSchema>
+export type ProductCreateInput     = z.infer<typeof productCreateSchema>
 export type CreateTransactionInput = z.infer<typeof createTransactionSchema>
-export type FinancialRecordInput = z.infer<typeof financialRecordSchema>
+export type FinancialRecordInput   = z.infer<typeof financialRecordSchema>
