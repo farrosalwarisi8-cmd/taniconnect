@@ -277,12 +277,18 @@ export type TablesUpdate<T extends keyof Database['public']['Tables']> =
 export type SupabaseDB = ReturnType<typeof createBrowserClient<Database>>
 
 /**
+ * Safe fallbacks prevent build time crash when environment variables are not injected in build step.
+ */
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder-project.supabase.co'
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsYWNlaG9sZGVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE2MDAwMDAwMDAsImV4cCI6MjAwMDAwMDAwMH0.placeholder'
+
+/**
  * Supabase client untuk Browser / Client Components.
  */
 export function createClient(): any {
   const client = createBrowserClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY
   )
 
   return client as any
