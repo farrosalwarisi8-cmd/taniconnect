@@ -4,6 +4,8 @@ import { groq, GROQ_MODEL, PRICE_PREDICTOR_PROMPT } from '@/lib/groq'
 import { findCommodityData, getHistoricalPrices } from '@/lib/price-data'
 import { z } from 'zod'
 
+export const dynamic = 'force-dynamic'
+
 const bodySchema = z.object({
   commodity: z.string().min(2).max(50),
   region: z.string().min(2).max(50).optional(),

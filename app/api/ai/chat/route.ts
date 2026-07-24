@@ -4,6 +4,8 @@ import { groq, GROQ_MODEL, AGRI_SYSTEM_PROMPT } from '@/lib/groq'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { z } from 'zod'
 
+export const dynamic = 'force-dynamic'
+
 const bodySchema = z.object({
   messages: z.array(z.object({
     role: z.enum(['user', 'assistant']),

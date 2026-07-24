@@ -4,6 +4,8 @@ import { groq, GROQ_MODEL, FINANCIAL_INSIGHT_PROMPT } from '@/lib/groq'
 import { REAL_BASE_PRICES, getRealPriceFromLatest } from '@/lib/price-data'
 import { checkRateLimit } from '@/lib/rate-limit'
 
+export const dynamic = 'force-dynamic'
+
 interface FinancialRecord {
   record_type: 'expense' | 'income'
   category: string

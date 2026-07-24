@@ -2,10 +2,10 @@ import Groq from 'groq-sdk'
 
 /**
  * Groq LLM client — HANYA dipakai di server (API Routes).
- * Free tier: 14,400 req/day dengan Llama 3.3 70B.
+ * Fallback dummy key prevents build-time static evaluation crash when GROQ_API_KEY is not set in Vercel environment.
  */
 export const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY!,
+  apiKey: process.env.GROQ_API_KEY || 'gsk_dummy_build_key_placeholder',
 })
 
 export const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'
