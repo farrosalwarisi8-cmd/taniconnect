@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { RegisterStep1 } from './_components/RegisterStep1'
 import { RegisterStep2 } from './_components/RegisterStep2'
-import { RegisterStep3 } from './_components/RegisterStep3'
 import { StepIndicator } from './_components/StepIndicator'
 import { ToastProvider, useToast } from '@/components/ui/Toast'
 import { createClient } from '@/lib/supabase/client'
@@ -14,7 +13,6 @@ import { normalizePhoneID } from '@/lib/utils'
 
 interface RegisterState {
   step1?: RegisterStep1Input
-  step2?: RegisterStep2Input
 }
 
 function RegisterFlow() {
@@ -22,7 +20,7 @@ function RegisterFlow() {
   const { toast } = useToast()
   const supabase = createClient()
 
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1)
+  const [currentStep, setCurrentStep] = useState<1 | 2>(1)
   const [state, setState] = useState<RegisterState>({})
   const [loading, setLoading] = useState(false)
 
@@ -31,22 +29,24 @@ function RegisterFlow() {
     setCurrentStep(2)
   }
 
-  const handleStep2Complete = (data: RegisterStep2Input) => {
-    setState(prev => ({ ...prev, step2: data }))
-    setCurrentStep(3)
-  }
-
-  const handleStep3Complete = async (ktpFile: File, landPhotoFile: File | null) => {
-    if (!state.step1 || !state.step2) {
+  const handleStep2Complete = async (data: RegisterStep2Input) => {
+    if (!state.step1) {
       toast('Data tidak lengkap, silakan ulangi dari awal', 'error')
+      setCurrentStep(1)
       return
     }
 
     setLoading(true)
     try {
       const phone = normalizePhoneID(state.step1.phone)
-      const pseudoEmail = `${phone.replace('+', '')}@taniconnect.local`
 
+      // Pakai gmail.com dengan email tag "+" agar valid & unik
+      const randomSuffix = Math.random().toString(36).substring(2, 8)
+      const pseudoEmail = `taniconnect+${phone.replace('+', '')}_${randomSuffix}@gmail.com`
+
+      console.log('DEBUG registrasi:', { phone, pseudoEmail })
+
+      // ─── 1. SIGN UP ─────────────────────────────────────────
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: pseudoEmail,
         password: state.step1.password,
@@ -59,63 +59,73 @@ function RegisterFlow() {
         },
       })
 
-      if (authError) throw authError
+      if (authError) {
+        console.error('Auth Error:', authError)
+        throw authError
+      }
       if (!authData.user) throw new Error('Gagal membuat akun')
 
-      const userId = authData.user.id
+      console.log('User created:', authData.user.id)
 
-      // Upload KTP
-      const ktpExt = ktpFile.name.split('.').pop()
-      const ktpPath = `${userId}/ktp-${Date.now()}.${ktpExt}`
-      const { error: ktpUploadError } = await supabase.storage
-        .from('kyc-documents')
-        .upload(ktpPath, ktpFile, {
-          contentType: ktpFile.type,
-          upsert: false,
+      // ─── 2. CEK SESSION — kalau belum ada, LOGIN MANUAL ─────
+      if (!authData.session) {
+        console.log('Session belum ada, coba sign in manual...')
+
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: pseudoEmail,
+          password: state.step1.password,
         })
-      if (ktpUploadError) throw ktpUploadError
 
-      let landPath: string | null = null
-      if (landPhotoFile) {
-        const landExt = landPhotoFile.name.split('.').pop()
-        landPath = `${userId}/land-${Date.now()}.${landExt}`
-        await supabase.storage
-          .from('kyc-documents')
-          .upload(landPath, landPhotoFile, {
-            contentType: landPhotoFile.type,
-            upsert: false,
-          })
+        if (signInError) {
+          console.error('Sign In Error:', signInError)
+          throw new Error('Akun berhasil dibuat, tapi gagal login. Silakan login manual.')
+        }
+
+        console.log('Session created:', !!signInData.session)
       }
 
-      // Update profile
+      // ─── 3. UPDATE PROFILE dengan data lokasi ────────────────
       const profileUpdate = {
-        province:                state.step2.province,
-        city:                    state.step2.city,
-        district:                state.step2.district,
-        address:                 state.step2.address,
-        ktp_storage_path:        ktpPath,
-        land_photo_storage_path: landPath,
-        kyc_submitted_at:        new Date().toISOString(),
+        province: data.province,
+        city:     data.city,
+        district: data.district,
+        address:  data.address,
       }
 
       const { error: profileError } = await supabase
         .from('profiles')
         .update(profileUpdate)
-        .eq('id', userId)
+        .eq('id', authData.user.id)
 
-      if (profileError) throw profileError
+      if (profileError) {
+        console.error('Profile Update Error (non-critical):', profileError)
+      }
 
-      toast('Registrasi berhasil! Silakan pilih peranmu', 'success', 5000)
-      router.push('/pilih-peran')
+      toast('Registrasi berhasil! Silakan pilih peranmu', 'success', 3000)
+
+      // ─── 4. Redirect + Force reload supaya middleware baca session baru ─
+      setTimeout(() => {
+        window.location.href = '/pilih-peran'
+      }, 500)
     } catch (err: any) {
-      console.error(err)
-      toast(
-        err.message === 'User already registered'
-          ? 'Nomor HP sudah terdaftar. Silakan login.'
-          : `Gagal daftar: ${err.message ?? 'error tidak diketahui'}`,
-        'error',
-        6000
-      )
+      console.error('Registration failed:', err)
+      const errorMsg = err.message || 'Error tidak diketahui'
+
+      let displayMsg = `Gagal daftar: ${errorMsg}`
+
+      if (errorMsg.includes('already registered') || errorMsg.includes('already been registered')) {
+        displayMsg = 'Nomor HP sudah terdaftar. Silakan login.'
+      } else if (errorMsg.includes('Failed to fetch') || errorMsg.includes('ERR_NAME_NOT_RESOLVED')) {
+        displayMsg = 'Koneksi ke server gagal. Cek URL Supabase di .env.local'
+      } else if (errorMsg.includes('Email address') && errorMsg.includes('invalid')) {
+        displayMsg = 'Format email tidak valid.'
+      } else if (errorMsg.includes('email rate limit') || errorMsg.includes('rate limit exceeded')) {
+        displayMsg = '⏳ Terlalu banyak percobaan. Tunggu 5-10 menit lalu coba lagi.'
+      } else if (errorMsg.includes('Too Many Requests')) {
+        displayMsg = '⏳ Server sibuk. Tunggu sebentar dan coba lagi.'
+      }
+
+      toast(displayMsg, 'error', 8000)
     } finally {
       setLoading(false)
     }
@@ -124,7 +134,11 @@ function RegisterFlow() {
   return (
     <main className="min-h-screen bg-white flex flex-col">
       <header className="px-6 py-4 border-b border-border flex items-center justify-between">
-        <Link href="/" className="text-primary-dark font-semibold text-lg min-h-0" style={{ fontFamily: "'Bricolage Grotesque', ui-sans-serif" }}>
+        <Link
+          href="/"
+          className="text-primary-dark font-semibold text-lg min-h-0"
+          style={{ fontFamily: "'Bricolage Grotesque', ui-sans-serif" }}
+        >
           🌿 TaniConnect
         </Link>
         <Link href="/login" className="text-btn-sm text-primary-dark hover:underline min-h-0">
@@ -133,7 +147,7 @@ function RegisterFlow() {
       </header>
 
       <div className="px-6 py-6 border-b border-border bg-surface-light">
-        <StepIndicator currentStep={currentStep} totalSteps={3} />
+        <StepIndicator currentStep={currentStep} totalSteps={2} />
       </div>
 
       <div className="flex-1 px-6 py-8 max-w-md mx-auto w-full">
@@ -145,15 +159,9 @@ function RegisterFlow() {
         )}
         {currentStep === 2 && (
           <RegisterStep2
-            defaultValues={state.step2}
+            defaultValues={undefined}
             onBack={() => setCurrentStep(1)}
             onComplete={handleStep2Complete}
-          />
-        )}
-        {currentStep === 3 && (
-          <RegisterStep3
-            onBack={() => setCurrentStep(2)}
-            onComplete={handleStep3Complete}
             loading={loading}
           />
         )}

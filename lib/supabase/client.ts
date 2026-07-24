@@ -11,6 +11,7 @@ export type Database = {
           updated_at: string
           full_name: string
           phone: string
+          email: string | null
           role: 'petani' | 'pembeli' | 'penyedia_alat' | 'admin'
           province: string | null
           city: string | null
@@ -32,6 +33,7 @@ export type Database = {
           id: string
           full_name: string
           phone: string
+          email?: string | null
           role?: 'petani' | 'pembeli' | 'penyedia_alat' | 'admin'
           province?: string | null
           city?: string | null
@@ -44,6 +46,8 @@ export type Database = {
           avatar_storage_path?: string | null
           bio?: string | null
           kyc_submitted_at?: string | null
+          kyc_reviewed_at?: string | null
+          kyc_reviewer_id?: string | null
         }
         Update: Partial<Database['public']['Tables']['profiles']['Insert']>
       }
@@ -270,23 +274,16 @@ export type TablesInsert<T extends keyof Database['public']['Tables']> =
 export type TablesUpdate<T extends keyof Database['public']['Tables']> =
   Database['public']['Tables'][T]['Update']
 
-/**
- * Type helper untuk Supabase client kita.
- * Dipakai untuk cast return dari createClient() supaya operasi
- * insert/update tidak menghasilkan "never" di Supabase SDK versi baru.
- */
 export type SupabaseDB = ReturnType<typeof createBrowserClient<Database>>
 
 /**
  * Supabase client untuk Browser / Client Components.
- *
- * PENTING: return-nya di-cast ke `any` supaya TypeScript tidak menganggap
- * hasil .from().insert() / .update() sebagai `never`.
- * Type safety tetap ada di skema Database di atas + Zod validation + RLS.
  */
 export function createClient(): any {
-  return createBrowserClient<Database>(
+  const client = createBrowserClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+
+  return client as any
 }

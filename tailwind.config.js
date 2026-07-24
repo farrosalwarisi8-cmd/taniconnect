@@ -5,6 +5,7 @@ module.exports = {
     './app/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
     './lib/**/*.{js,ts,jsx,tsx,mdx}',
+    './hooks/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
@@ -101,11 +102,12 @@ module.exports = {
         'sm':     '0px 4px 6px -1px rgba(0,0,0,0.1)',
         'md':     '0px 16px 44px 0px rgba(15,23,42,0.12)',
         'lg':     '0px 18px 46px 0px rgba(15,118,67,0.22)',
-        'btn-primary': '0px 8px 16px -2px rgba(74,222,128,0.25)',
-        'btn-secondary':'0px 16px 44px 0px rgba(15,23,42,0.12)',
+        'btn-primary':   '0px 8px 16px -2px rgba(74,222,128,0.25)',
+        'btn-secondary': '0px 16px 44px 0px rgba(15,23,42,0.12)',
         'nav':    '0px 4px 18px -6px rgba(22,163,74,0.14), 0px 1px 4px 0px rgba(0,0,0,0.04), inset 0px 1px 0px 0px rgba(255,255,255,0.8)',
         'modal':  '0px 24px 64px 0px rgba(15,23,42,0.3)',
-        'icon-btn':'0px 4px 6px -1px rgba(0,0,0,0.1)',
+        'icon-btn': '0px 4px 6px -1px rgba(0,0,0,0.1)',
+        'focus':  '0 0 0 3px rgba(74, 222, 128, 0.3)',
       },
 
       // ─── BREAKPOINTS ──────────────────────────────────────────
@@ -129,10 +131,6 @@ module.exports = {
           '0%':   { backgroundPosition: '-200% 0' },
           '100%': { backgroundPosition: '200% 0' },
         },
-        pulse: {
-          '0%, 100%': { opacity: '1' },
-          '50%':      { opacity: '0.5' },
-        },
         'slide-in-right': {
           '0%':   { transform: 'translateX(100%)', opacity: '0' },
           '100%': { transform: 'translateX(0)',    opacity: '1' },
@@ -145,12 +143,26 @@ module.exports = {
           '0%, 100%': { transform: 'translateY(0)' },
           '50%':      { transform: 'translateY(-4px)' },
         },
+        'pulse-dot': {
+          '0%, 100%': { transform: 'scaleY(0.4)', opacity: '0.6' },
+          '50%':      { transform: 'scaleY(1)',   opacity: '1' },
+        },
+        'glow-pulse': {
+          '0%, 100%': {
+            boxShadow: '0 0 0 0 rgba(74, 222, 128, 0.4)',
+          },
+          '50%': {
+            boxShadow: '0 0 0 8px rgba(74, 222, 128, 0)',
+          },
+        },
       },
       animation: {
         'shimmer':        'shimmer 1.5s infinite linear',
         'slide-in-right': 'slide-in-right 0.3s ease-out',
         'slide-out-right':'slide-out-right 0.3s ease-in',
         'bounce-dot':     'bounce-dot 1s infinite',
+        'pulse-dot':      'pulse-dot 1s ease-in-out infinite',
+        'glow-pulse':     'glow-pulse 2s ease-in-out infinite',
       },
     },
   },

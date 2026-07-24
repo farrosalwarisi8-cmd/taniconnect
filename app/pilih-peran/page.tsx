@@ -1,9 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
 import { ToastProvider, useToast } from '@/components/ui/Toast'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
@@ -43,6 +42,25 @@ function PilihPeranContent() {
 
   const [selectedRole, setSelectedRole] = useState<Role | null>(null)
   const [loading, setLoading] = useState(false)
+  const [checking, setChecking] = useState(true)
+  const [user, setUser] = useState<{ id: string } | null>(null)
+
+  // Cek session saat mount
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (!user) {
+        toast('Sesi habis, silakan login ulang', 'warning')
+        setTimeout(() => router.push('/login'), 1000)
+        return
+      }
+
+      setUser({ id: user.id })
+      setChecking(false)
+    }
+    checkSession()
+  }, [supabase, router, toast])
 
   const handleContinue = async () => {
     if (!selectedRole) {
@@ -50,11 +68,15 @@ function PilihPeranContent() {
       return
     }
 
+    if (!user) {
+      toast('Sesi tidak ditemukan, silakan login ulang', 'error')
+      setTimeout(() => router.push('/login'), 1000)
+      return
+    }
+
     setLoading(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Session tidak ditemukan')
-
+      // Update role di profile
       const { error: profileError } = await supabase
         .from('profiles')
         .update({ role: selectedRole })
@@ -62,15 +84,16 @@ function PilihPeranContent() {
 
       if (profileError) throw profileError
 
+      // Update juga di auth metadata (untuk middleware)
       const { error: authError } = await supabase.auth.updateUser({
         data: { role: selectedRole },
       })
-      if (authError) throw authError
+      if (authError) console.warn('Auth metadata update warning:', authError)
 
       const destinations: Record<Role, string> = {
         petani:        '/petani/dashboard',
         pembeli:       '/pembeli/marketplace',
-        penyedia_alat: '/penyedia/dashboard',
+        penyedia_alat: '/petani/dashboard', // fallback
       }
 
       toast(`Selamat datang, ${ROLES.find(r => r.value === selectedRole)?.title}!`, 'success')
@@ -83,6 +106,17 @@ function PilihPeranContent() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (checking) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-4xl mb-3 animate-pulse">🌿</div>
+          <p className="text-fg/70">Memeriksa sesi...</p>
+        </div>
+      </main>
+    )
   }
 
   return (
@@ -118,10 +152,6 @@ function PilihPeranContent() {
                     : 'border-border hover:border-primary-light hover:shadow-md',
                 )}
               >
-                {role.value === 'petani' && !isSelected && (
-                  <div className="w-1 h-16 bg-primary rounded-full mb-4 -ml-6" />
-                )}
-
                 <div className="text-6xl mb-4">{role.emoji}</div>
                 <h3 className="text-h2 text-fg-dark mb-2">{role.title}</h3>
                 <p className="text-sm text-fg/70 leading-relaxed">{role.description}</p>

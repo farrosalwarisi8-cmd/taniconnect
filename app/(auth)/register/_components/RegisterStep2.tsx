@@ -4,10 +4,9 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { Badge } from '@/components/ui/Badge'
 import { registerStep2Schema, type RegisterStep2Input } from '@/lib/validations'
 
-// Daftar provinsi Indonesia — simplified untuk demo
-// Di production: fetch dari API wilayah Kemendagri
 const PROVINCES = [
   'DKI Jakarta', 'Jawa Barat', 'Jawa Tengah', 'DI Yogyakarta', 'Jawa Timur',
   'Banten', 'Bali', 'Sumatera Utara', 'Sumatera Barat', 'Riau',
@@ -20,13 +19,14 @@ interface RegisterStep2Props {
   defaultValues?: RegisterStep2Input
   onBack:     () => void
   onComplete: (data: RegisterStep2Input) => void
+  loading?:   boolean
 }
 
-export function RegisterStep2({ defaultValues, onBack, onComplete }: RegisterStep2Props) {
+export function RegisterStep2({ defaultValues, onBack, onComplete, loading }: RegisterStep2Props) {
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm<RegisterStep2Input>({
     resolver: zodResolver(registerStep2Schema),
     defaultValues,
@@ -39,7 +39,7 @@ export function RegisterStep2({ defaultValues, onBack, onComplete }: RegisterSte
           Kamu tinggal di mana? 📍
         </h1>
         <p className="text-body text-fg/70">
-          Lokasi membantu kami menampilkan produk terdekat dan hitung ongkir.
+          Lokasi membantu kami menampilkan produk terdekat & hitung ongkir.
         </p>
       </div>
 
@@ -96,14 +96,37 @@ export function RegisterStep2({ defaultValues, onBack, onComplete }: RegisterSte
         )}
       </div>
 
+      {/* Info verifikasi KTP nanti */}
+      <Badge variant="info" size="md" icon={<span>ℹ️</span>}>
+        Verifikasi KTP bisa dilakukan setelah login dari halaman profil
+      </Badge>
+
       <div className="flex gap-3">
-        <Button type="button" variant="secondary" onClick={onBack} leftIcon={<span>←</span>}>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={onBack}
+          leftIcon={<span>←</span>}
+          disabled={loading}
+        >
           Kembali
         </Button>
-        <Button type="submit" fullWidth size="lg" loading={isSubmitting} rightIcon={<span>→</span>}>
-          Lanjut
+        <Button
+          type="submit"
+          fullWidth
+          size="lg"
+          loading={loading}
+        >
+          Selesai & Daftar
         </Button>
       </div>
+
+      <p className="text-caption text-fg/60 text-center">
+        Dengan mendaftar, kamu setuju dengan{' '}
+        <a href="#" className="text-primary-dark underline">Syarat & Ketentuan</a>{' '}
+        serta{' '}
+        <a href="#" className="text-primary-dark underline">Kebijakan Privasi</a>.
+      </p>
     </form>
   )
 }

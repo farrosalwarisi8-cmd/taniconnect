@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -33,42 +33,74 @@ function LoginForm() {
     setLoading(true)
     try {
       const phone = normalizePhoneID(data.phone)
-      const pseudoEmail = `${phone.replace('+', '')}@taniconnect.local`
 
-      const { data: authData, error } = await supabase.auth.signInWithPassword({
-        email:    pseudoEmail,
+      console.log('DEBUG login: cari email untuk phone', phone)
+
+      // ─── 1. CARI EMAIL berdasarkan phone di tabel profiles ───
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('email, role')
+        .eq('phone', phone)
+        .limit(1)
+
+      if (profileError) {
+        console.error('Profile lookup error:', profileError)
+        toast('Terjadi kesalahan sistem, coba lagi', 'error')
+        return
+      }
+
+      if (!profiles || profiles.length === 0) {
+        toast('Nomor HP tidak terdaftar. Silakan daftar dulu.', 'error')
+        return
+      }
+
+      const profile = profiles[0] as { email: string | null; role: string }
+
+      if (!profile.email) {
+        toast('Data akun tidak lengkap. Hubungi admin.', 'error')
+        return
+      }
+
+      console.log('DEBUG login: email ditemukan, coba login...')
+
+      // ─── 2. LOGIN pakai email + password ─────────────────────
+      const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: profile.email,
         password: data.password,
       })
 
-      if (error) {
-        // Pesan generik untuk mencegah user enumeration
+      if (signInError) {
+        console.error('Sign In Error:', signInError)
+        // Pesan generik untuk cegah user enumeration
         toast('Nomor HP atau password salah', 'error')
         return
       }
 
-      if (!authData.user) {
+      if (!authData.user || !authData.session) {
         toast('Login gagal, coba lagi', 'error')
         return
       }
 
-      toast('Berhasil masuk! Mengalihkan…', 'success', 2000)
+      console.log('Login berhasil, session:', !!authData.session, 'role:', profile.role)
 
-      // Redirect berdasarkan role user
-      const userRole = authData.user.user_metadata?.role as string | undefined
+      toast('Berhasil masuk! Mengalihkan...', 'success', 2000)
+
+      // ─── 3. Redirect berdasarkan role ────────────────────────
       const roleRedirects: Record<string, string> = {
         petani:        '/petani/dashboard',
         pembeli:       '/pembeli/marketplace',
-        penyedia_alat: '/penyedia/dashboard',
-        admin:         '/admin/dashboard',
+        penyedia_alat: '/petani/dashboard',
+        admin:         '/admin/dashboard',   // ✅ FIXED: admin ke admin dashboard
       }
 
-      const destination = redirectTo ?? roleRedirects[userRole ?? ''] ?? '/pilih-peran'
+      const destination = redirectTo ?? roleRedirects[profile.role ?? 'pembeli'] ?? '/pembeli/marketplace'
 
-      // Force reload untuk trigger middleware refresh session
+      // Force reload biar middleware baca session baru
       setTimeout(() => {
         window.location.href = destination
       }, 800)
     } catch (err: any) {
+      console.error('Login failed:', err)
       toast(`Error: ${err.message ?? 'coba lagi nanti'}`, 'error')
     } finally {
       setLoading(false)
@@ -77,7 +109,6 @@ function LoginForm() {
 
   return (
     <main className="min-h-screen bg-white flex flex-col">
-      {/* Header */}
       <header className="px-6 py-4 border-b border-border">
         <Link
           href="/"
@@ -155,10 +186,25 @@ function LoginForm() {
   )
 }
 
+// ─── Loading Fallback saat Suspense boundary aktif ───────────
+function LoginLoadingFallback() {
+  return (
+    <main className="min-h-screen bg-white flex items-center justify-center">
+      <div className="text-center">
+        <div className="text-6xl mb-3 animate-pulse">🌿</div>
+        <p className="text-fg/70">Memuat halaman login...</p>
+      </div>
+    </main>
+  )
+}
+
+// ─── Page export dengan Suspense wrapper ─────────────────────
 export default function LoginPage() {
   return (
     <ToastProvider>
-      <LoginForm />
+      <Suspense fallback={<LoginLoadingFallback />}>
+        <LoginForm />
+      </Suspense>
     </ToastProvider>
   )
 }

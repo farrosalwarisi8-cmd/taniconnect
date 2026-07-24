@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { formatRupiah, formatDateID } from '@/lib/utils'
 import { AddRecordButton } from './_components/AddRecordButton'
+import { FinancialInsightCard } from './_components/FinancialInsightCard'
 import type { Tables } from '@/lib/supabase/client'
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -64,6 +65,7 @@ export default async function KeuanganPage() {
       </header>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+        {/* Ringkasan Keuangan */}
         <Card variant="elevated" padding="lg" className="!bg-gradient-to-br from-green-50 to-white">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <div>
@@ -98,6 +100,10 @@ export default async function KeuanganPage() {
           </div>
         </Card>
 
+        {/* ⭐ AI Insight Card — analisa otomatis + rekomendasi dari AI */}
+        <FinancialInsightCard />
+
+        {/* Tombol tambah + section catatan */}
         <div className="flex items-center justify-between">
           <h2 className="text-h2 text-fg-dark">Catatan Keuangan</h2>
           <AddRecordButton />

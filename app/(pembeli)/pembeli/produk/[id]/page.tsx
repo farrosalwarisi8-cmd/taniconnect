@@ -139,16 +139,54 @@ export default async function ProductDetailPage({ params }: Props) {
         </div>
 
         {seller && (
-          <div className="bg-surface-light rounded-sm p-4 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-primary-light text-primary-dark flex items-center justify-center font-semibold shrink-0">
-              {seller.full_name?.[0]?.toUpperCase() ?? 'P'}
+          <div className="border border-gray-200 rounded-2xl overflow-hidden">
+            {/* Seller card header */}
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-5 py-3 border-b border-gray-100">
+              <p className="text-[12px] font-semibold text-green-800 uppercase tracking-wide">Dijual oleh</p>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-fg-dark truncate">{seller.full_name}</p>
-              <p className="text-caption text-fg/60">
-                {seller.is_verified && '✓ Terverifikasi · '}
-                ⭐ {seller.rating_avg?.toFixed(1) ?? '—'} ({seller.rating_count ?? 0} ulasan)
-              </p>
+            <div className="p-4 flex items-center gap-4">
+              {/* Avatar */}
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-green-100 to-green-200 text-green-800 flex items-center justify-center font-bold text-xl shrink-0 shadow-sm">
+                {seller.full_name?.split(' ').map((w: string) => w[0]).slice(0,2).join('').toUpperCase() ?? 'P'}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-bold text-gray-900 text-[15px] truncate">{seller.full_name}</p>
+                  {seller.is_verified && (
+                    <span className="bg-green-100 text-green-700 text-[11px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
+                      ✓ Terverifikasi
+                    </span>
+                  )}
+                </div>
+
+                {/* Rating */}
+                <div className="flex items-center gap-1.5 mt-1">
+                  <div className="flex">
+                    {[1,2,3,4,5].map(i => (
+                      <span key={i} className={`text-[14px] ${i <= Math.round(seller.rating_avg ?? 0) ? 'text-amber-400' : 'text-gray-200'}`}>★</span>
+                    ))}
+                  </div>
+                  <span className="text-[13px] text-gray-600 font-medium">
+                    {seller.rating_avg?.toFixed(1) ?? '—'}
+                  </span>
+                  <span className="text-[12px] text-gray-400">
+                    ({seller.rating_count ?? 0} ulasan)
+                  </span>
+                </div>
+
+                {seller.city && (
+                  <p className="text-[12px] text-gray-500 mt-0.5">📍 {seller.city}</p>
+                )}
+              </div>
+
+              {/* CTA */}
+              <Link
+                href={`/pembeli/penjual/${seller.id}`}
+                className="shrink-0 px-3 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold text-[12px] rounded-xl transition-colors shadow-sm min-h-0 touch-target-exempt"
+              >
+                Lihat Profil →
+              </Link>
             </div>
           </div>
         )}
