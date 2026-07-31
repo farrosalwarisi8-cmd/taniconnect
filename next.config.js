@@ -43,20 +43,21 @@ const securityHeaders = [
 
       // Image: Supabase + Unsplash + Pexels + Pixabay
       "img-src 'self' data: blob: " +
-        "https://*.supabase.co https://*.supabase.in " +
-        "https://images.unsplash.com https://plus.unsplash.com " +
-        "https://images.pexels.com " +
-        "https://cdn.pixabay.com",
+      "https://*.supabase.co https://*.supabase.in " +
+      "https://images.unsplash.com https://plus.unsplash.com " +
+      "https://images.pexels.com " +
+      "https://cdn.pixabay.com",
 
-      // Connect: Supabase + Midtrans + Groq AI + Bapanas + PIHPS BI
+      // ⭐ Connect: Supabase + Midtrans + Groq AI + Bapanas + PIHPS BI + Google Fonts (untuk SW)
       "connect-src 'self' " +
-        "https://*.supabase.co https://*.supabase.in " +
-        "wss://*.supabase.co wss://*.supabase.in " +
-        "https://api.midtrans.com https://api.sandbox.midtrans.com " +
-        "https://app.midtrans.com https://app.sandbox.midtrans.com " +
-        "https://api.groq.com " +
-        "https://api-panelharga.badanpangan.go.id " +
-        "https://www.bi.go.id",
+      "https://*.supabase.co https://*.supabase.in " +
+      "wss://*.supabase.co wss://*.supabase.in " +
+      "https://api.midtrans.com https://api.sandbox.midtrans.com " +
+      "https://app.midtrans.com https://app.sandbox.midtrans.com " +
+      "https://api.groq.com " +
+      "https://api-panelharga.badanpangan.go.id " +
+      "https://www.bi.go.id " +
+      "https://fonts.googleapis.com https://fonts.gstatic.com",
 
       // Frame: Midtrans popup
       "frame-src 'self' https://app.midtrans.com https://app.sandbox.midtrans.com",
@@ -70,10 +71,10 @@ const securityHeaders = [
       // Form action
       "form-action 'self'",
 
-      // ⭐ Worker: Service Worker untuk PWA (offline support)
+      // Worker: Service Worker untuk PWA (offline support)
       "worker-src 'self' blob:",
 
-      // ⭐ Manifest: PWA manifest.json
+      // Manifest: PWA manifest.json
       "manifest-src 'self'",
 
       // Upgrade insecure
@@ -90,7 +91,7 @@ const nextConfig = {
         source: '/(.*)',
         headers: securityHeaders,
       },
-      // ⭐ Cache manifest.json dengan header yang tepat
+      // Cache manifest.json dengan header yang tepat
       {
         source: '/manifest.json',
         headers: [
@@ -104,7 +105,7 @@ const nextConfig = {
           },
         ],
       },
-      // ⭐ Service Worker tidak boleh di-cache (biar update instant)
+      // Service Worker tidak boleh di-cache (biar update instant)
       {
         source: '/sw.js',
         headers: [

@@ -40,11 +40,10 @@ function RegisterFlow() {
     try {
       const phone = normalizePhoneID(state.step1.phone)
 
-      // Pakai gmail.com dengan email tag "+" agar valid & unik
-      const randomSuffix = Math.random().toString(36).substring(2, 8)
-      const pseudoEmail = `taniconnect+${phone.replace('+', '')}_${randomSuffix}@gmail.com`
-
-      console.log('DEBUG registrasi:', { phone, pseudoEmail })
+      // Pseudo-email: kombinasi random 16-char hex + timestamp untuk keunikan & tidak predictable
+      const randomPart = Array.from(crypto.getRandomValues(new Uint8Array(8)))
+        .map(b => b.toString(16).padStart(2, '0')).join('')
+      const pseudoEmail = `tc.${randomPart}.${Date.now()}@taniconnect.internal`
 
       // ─── 1. SIGN UP ─────────────────────────────────────────
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -60,36 +59,34 @@ function RegisterFlow() {
       })
 
       if (authError) {
-        console.error('Auth Error:', authError)
         throw authError
       }
       if (!authData.user) throw new Error('Gagal membuat akun')
 
-      console.log('User created:', authData.user.id)
+      // Init roles array dengan 'pembeli' sebagai default
+      await supabase
+        .from('profiles')
+        .update({ roles: ['pembeli'] })
+        .eq('id', authData.user.id)
 
       // ─── 2. CEK SESSION — kalau belum ada, LOGIN MANUAL ─────
       if (!authData.session) {
-        console.log('Session belum ada, coba sign in manual...')
-
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        const { error: signInError } = await supabase.auth.signInWithPassword({
           email: pseudoEmail,
           password: state.step1.password,
         })
 
         if (signInError) {
-          console.error('Sign In Error:', signInError)
           throw new Error('Akun berhasil dibuat, tapi gagal login. Silakan login manual.')
         }
-
-        console.log('Session created:', !!signInData.session)
       }
 
       // ─── 3. UPDATE PROFILE dengan data lokasi ────────────────
       const profileUpdate = {
         province: data.province,
-        city:     data.city,
+        city: data.city,
         district: data.district,
-        address:  data.address,
+        address: data.address,
       }
 
       const { error: profileError } = await supabase
@@ -98,7 +95,7 @@ function RegisterFlow() {
         .eq('id', authData.user.id)
 
       if (profileError) {
-        console.error('Profile Update Error (non-critical):', profileError)
+        // Non-critical: profil masih bisa diupdate nanti
       }
 
       toast('Registrasi berhasil! Silakan pilih peranmu', 'success', 3000)
@@ -107,9 +104,8 @@ function RegisterFlow() {
       setTimeout(() => {
         window.location.href = '/pilih-peran'
       }, 500)
-    } catch (err: any) {
-      console.error('Registration failed:', err)
-      const errorMsg = err.message || 'Error tidak diketahui'
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Error tidak diketahui'
 
       let displayMsg = `Gagal daftar: ${errorMsg}`
 

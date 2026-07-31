@@ -1,6 +1,8 @@
 import { createBrowserClient } from '@supabase/ssr'
 
 // ─── DATABASE TYPES ──────────────────────────────────────────
+export type UserRole = 'petani' | 'pembeli' | 'penyedia_alat' | 'admin'
+
 export type Database = {
   public: {
     Tables: {
@@ -12,7 +14,10 @@ export type Database = {
           full_name: string
           phone: string
           email: string | null
-          role: 'petani' | 'pembeli' | 'penyedia_alat' | 'admin'
+          /** role aktif saat ini (dipakai untuk redirect & session) */
+          role: UserRole
+          /** semua role yang dimiliki user — support multi-role */
+          roles: UserRole[]
           province: string | null
           city: string | null
           district: string | null
@@ -34,7 +39,8 @@ export type Database = {
           full_name: string
           phone: string
           email?: string | null
-          role?: 'petani' | 'pembeli' | 'penyedia_alat' | 'admin'
+          role?: UserRole
+          roles?: UserRole[]
           province?: string | null
           city?: string | null
           district?: string | null
@@ -112,8 +118,8 @@ export type Database = {
           tracking_number: string | null
           shipping_address: Record<string, unknown> | null
           status:
-            | 'pending' | 'paid' | 'processed' | 'shipped'
-            | 'delivered' | 'completed' | 'disputed' | 'cancelled'
+          | 'pending' | 'paid' | 'processed' | 'shipped'
+          | 'delivered' | 'completed' | 'disputed' | 'cancelled'
           escrow_status: 'held' | 'released' | 'refunded'
           escrow_released_at: string | null
           idempotency_key: string | null
@@ -134,8 +140,8 @@ export type Database = {
           tracking_number?: string | null
           shipping_address?: Record<string, unknown> | null
           status?:
-            | 'pending' | 'paid' | 'processed' | 'shipped'
-            | 'delivered' | 'completed' | 'disputed' | 'cancelled'
+          | 'pending' | 'paid' | 'processed' | 'shipped'
+          | 'delivered' | 'completed' | 'disputed' | 'cancelled'
           escrow_status?: 'held' | 'released' | 'refunded'
           escrow_released_at?: string | null
           idempotency_key?: string | null
@@ -186,8 +192,8 @@ export type Database = {
           season_year: number
           record_type: 'expense' | 'income'
           category:
-            | 'bibit' | 'pupuk' | 'pestisida' | 'tenaga_kerja'
-            | 'sewa_lahan' | 'lainnya' | 'penjualan'
+          | 'bibit' | 'pupuk' | 'pestisida' | 'tenaga_kerja'
+          | 'sewa_lahan' | 'lainnya' | 'penjualan'
           item_name: string
           quantity: number
           unit: string
@@ -203,8 +209,8 @@ export type Database = {
           season_year: number
           record_type: 'expense' | 'income'
           category:
-            | 'bibit' | 'pupuk' | 'pestisida' | 'tenaga_kerja'
-            | 'sewa_lahan' | 'lainnya' | 'penjualan'
+          | 'bibit' | 'pupuk' | 'pestisida' | 'tenaga_kerja'
+          | 'sewa_lahan' | 'lainnya' | 'penjualan'
           item_name: string
           quantity: number
           unit: string
@@ -220,7 +226,7 @@ export type Database = {
           id: string
           created_at: string
           actor_id: string | null
-          actor_role: 'petani' | 'pembeli' | 'penyedia_alat' | 'admin' | null
+          actor_role: UserRole | null
           action: string
           resource_type: string
           resource_id: string | null
@@ -232,7 +238,7 @@ export type Database = {
         }
         Insert: {
           actor_id?: string | null
-          actor_role?: 'petani' | 'pembeli' | 'penyedia_alat' | 'admin' | null
+          actor_role?: UserRole | null
           action: string
           resource_type: string
           resource_id?: string | null
@@ -244,22 +250,97 @@ export type Database = {
         }
         Update: Partial<Database['public']['Tables']['audit_logs']['Insert']>
       }
+      equipment: {
+        Row: {
+          id: string
+          created_at: string
+          owner_id: string
+          name: string
+          category: 'traktor' | 'mesin_panen' | 'pompa_air' | 'drone' | 'pupuk' | 'bibit' | 'pestisida' | 'lainnya'
+          description: string | null
+          price_sell: number | null
+          price_rent: number | null
+          deposit_amount: number | null
+          stock: number
+          is_available: boolean
+          image_paths: string[]
+          province: string | null
+          city: string | null
+          condition_note: string | null
+        }
+        Insert: {
+          owner_id: string
+          name: string
+          category: 'traktor' | 'mesin_panen' | 'pompa_air' | 'drone' | 'pupuk' | 'bibit' | 'pestisida' | 'lainnya'
+          description?: string | null
+          price_sell?: number | null
+          price_rent?: number | null
+          deposit_amount?: number | null
+          stock?: number
+          is_available?: boolean
+          image_paths?: string[]
+          province?: string | null
+          city?: string | null
+          condition_note?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['equipment']['Insert']>
+      }
+      rental_bookings: {
+        Row: {
+          id: string
+          created_at: string
+          equipment_id: string
+          renter_id: string
+          start_date: string
+          end_date: string
+          total_days: number
+          total_price: number
+          deposit_status: 'held' | 'released' | 'refunded'
+          status: 'pending' | 'active' | 'completed' | 'late' | 'cancelled'
+          photo_before_url: string | null
+          photo_after_url: string | null
+          return_notes: string | null
+          returned_at: string | null
+          deposit_refund_amount: number | null
+        }
+        Insert: {
+          equipment_id: string
+          renter_id: string
+          start_date: string
+          end_date: string
+          total_days: number
+          total_price: number
+          deposit_status?: 'held' | 'released' | 'refunded'
+          status?: 'pending' | 'active' | 'completed' | 'late' | 'cancelled'
+          photo_before_url?: string | null
+          photo_after_url?: string | null
+          return_notes?: string | null
+          returned_at?: string | null
+          deposit_refund_amount?: number | null
+        }
+        Update: Partial<Database['public']['Tables']['rental_bookings']['Insert']>
+      }
     }
     Views: Record<string, never>
     Functions: Record<string, never>
     Enums: {
-      user_role: 'petani' | 'pembeli' | 'penyedia_alat' | 'admin'
+      user_role: UserRole
       product_category: 'sayuran' | 'buah' | 'beras_padi' | 'rempah' | 'lainnya'
       product_status: 'active' | 'sold' | 'draft'
       transaction_status:
-        | 'pending' | 'paid' | 'processed' | 'shipped'
-        | 'delivered' | 'completed' | 'disputed' | 'cancelled'
+      | 'pending' | 'paid' | 'processed' | 'shipped'
+      | 'delivered' | 'completed' | 'disputed' | 'cancelled'
       escrow_status: 'held' | 'released' | 'refunded'
       payment_status: 'pending' | 'settlement' | 'expire' | 'cancel' | 'refund'
       record_type: 'expense' | 'income'
       expense_category:
-        | 'bibit' | 'pupuk' | 'pestisida' | 'tenaga_kerja'
-        | 'sewa_lahan' | 'lainnya' | 'penjualan'
+      | 'bibit' | 'pupuk' | 'pestisida' | 'tenaga_kerja'
+      | 'sewa_lahan' | 'lainnya' | 'penjualan'
+      equipment_category:
+      | 'traktor' | 'mesin_panen' | 'pompa_air' | 'drone'
+      | 'pupuk' | 'bibit' | 'pestisida' | 'lainnya'
+      rental_status:
+      | 'pending' | 'active' | 'completed' | 'late' | 'cancelled'
     }
   }
 }
@@ -276,20 +357,29 @@ export type TablesUpdate<T extends keyof Database['public']['Tables']> =
 
 export type SupabaseDB = ReturnType<typeof createBrowserClient<Database>>
 
-/**
- * Safe fallbacks prevent build time crash when environment variables are not injected in build step.
- */
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder-project.supabase.co'
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsYWNlaG9sZGVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE2MDAwMDAwMDAsImV4cCI6MjAwMDAwMDAwMH0.placeholder'
+// ─── ENV VALIDATION ──────────────────────────────────────────
+function getRequiredEnv(key: string): string {
+  const value = process.env[key]
+  if (!value || value.startsWith('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsYWNlaG9sZGVyIi')) {
+    if (typeof window === 'undefined') {
+      // Server-side: throw error
+      throw new Error(`Missing required environment variable: ${key}`)
+    }
+    // Client-side: return empty (will fail gracefully at runtime)
+    return ''
+  }
+  return value
+}
 
-/**
- * Supabase client untuk Browser / Client Components.
- */
-export function createClient(): any {
-  const client = createBrowserClient<Database>(
-    SUPABASE_URL,
-    SUPABASE_ANON_KEY
-  )
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
 
-  return client as any
+export function createClient(): SupabaseDB {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    throw new Error(
+      'Supabase URL atau Anon Key belum dikonfigurasi. ' +
+      'Pastikan NEXT_PUBLIC_SUPABASE_URL dan NEXT_PUBLIC_SUPABASE_ANON_KEY sudah diset di .env.local'
+    )
+  }
+  return createBrowserClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY)
 }

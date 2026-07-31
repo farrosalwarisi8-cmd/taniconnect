@@ -17,7 +17,11 @@ export default async function PetaniDashboardPage() {
     .eq('id', user.id)
     .single()
 
-  const profile = profileData as Pick<Tables<'profiles'>, 'full_name' | 'is_verified' | 'city'> & { province?: string | null } | null
+  const profile = profileData as
+    | (Pick<Tables<'profiles'>, 'full_name' | 'is_verified' | 'city'> & {
+      province?: string | null
+    })
+    | null
 
   const currentYear = new Date().getFullYear()
   const { data: recordsData } = await supabase
@@ -32,11 +36,17 @@ export default async function PetaniDashboardPage() {
     .eq('seller_id', user.id)
     .eq('status', 'active')
 
-  const records = (recordsData ?? []) as Array<Pick<Tables<'financial_records'>, 'record_type' | 'total_amount'>>
+  const records = (recordsData ?? []) as Array<
+    Pick<Tables<'financial_records'>, 'record_type' | 'total_amount'>
+  >
 
-  const totalIncome  = records.filter(r => r.record_type === 'income').reduce((s, r) => s + Number(r.total_amount), 0)
-  const totalExpense = records.filter(r => r.record_type === 'expense').reduce((s, r) => s + Number(r.total_amount), 0)
-  const profit       = totalIncome - totalExpense
+  const totalIncome = records
+    .filter((r) => r.record_type === 'income')
+    .reduce((s, r) => s + Number(r.total_amount), 0)
+  const totalExpense = records
+    .filter((r) => r.record_type === 'expense')
+    .reduce((s, r) => s + Number(r.total_amount), 0)
+  const profit = totalIncome - totalExpense
 
   const greeting = (() => {
     const h = new Date().getHours()
@@ -74,6 +84,14 @@ export default async function PetaniDashboardPage() {
       featured: false,
     },
     {
+      href: '/petani/produk',
+      icon: '📦',
+      label: 'Produk Saya',
+      desc: 'Kelola listing',
+      gradient: null,
+      featured: false,
+    },
+    {
       href: '/petani/keuangan',
       icon: '📊',
       label: 'Keuangan',
@@ -106,13 +124,17 @@ export default async function PetaniDashboardPage() {
         {/* Decorative elements */}
         <div className="absolute top-0 right-0 w-72 h-72 rounded-full bg-white/5 -translate-y-1/3 translate-x-1/3" />
         <div className="absolute bottom-0 left-0 w-48 h-48 rounded-full bg-white/5 translate-y-1/2 -translate-x-1/4" />
-        <div className="absolute top-6 right-8 text-6xl opacity-10 select-none">🌿</div>
+        <div className="absolute top-6 right-8 text-6xl opacity-10 select-none">
+          🌿
+        </div>
 
         <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-8 pb-20">
           {/* Top bar: greeting + profile link */}
           <div className="flex items-start justify-between gap-4 mb-3">
             <div>
-              <p className="text-white/70 text-[13px] font-medium mb-0.5">{greeting}, 👋</p>
+              <p className="text-white/70 text-[13px] font-medium mb-0.5">
+                {greeting}, 👋
+              </p>
               <h1
                 className="text-white leading-tight"
                 style={{
@@ -131,9 +153,13 @@ export default async function PetaniDashboardPage() {
 
             <div className="flex items-center gap-2">
               {profile?.is_verified ? (
-                <Badge variant="verified" size="md">✓ Terverifikasi</Badge>
+                <Badge variant="verified" size="md">
+                  ✓ Terverifikasi
+                </Badge>
               ) : (
-                <Badge variant="warning" size="md">⏳ KYC menunggu</Badge>
+                <Badge variant="warning" size="md">
+                  ⏳ KYC menunggu
+                </Badge>
               )}
               <Link
                 href="/petani/profil"
@@ -147,9 +173,9 @@ export default async function PetaniDashboardPage() {
           </div>
 
           {/* Location */}
-          {(profileData?.city || (profileData as any)?.province) && (
+          {(profile?.city || profile?.province) && (
             <p className="text-white/60 text-[13px]">
-              📍 {[profileData?.city, (profileData as any)?.province].filter(Boolean).join(', ')}
+              📍 {[profile?.city, profile?.province].filter(Boolean).join(', ')}
             </p>
           )}
         </div>
@@ -160,7 +186,9 @@ export default async function PetaniDashboardPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 col-span-2 lg:col-span-1">
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-xl bg-green-100 flex items-center justify-center text-sm">💰</div>
+              <div className="w-8 h-8 rounded-xl bg-green-100 flex items-center justify-center text-sm">
+                💰
+              </div>
               <p className="text-[12px] text-gray-500 font-medium">Pendapatan</p>
             </div>
             <p
@@ -174,7 +202,9 @@ export default async function PetaniDashboardPage() {
 
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center text-sm">📦</div>
+              <div className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center text-sm">
+                📦
+              </div>
               <p className="text-[12px] text-gray-500 font-medium">Modal</p>
             </div>
             <p
@@ -188,23 +218,34 @@ export default async function PetaniDashboardPage() {
 
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <div className="flex items-center gap-2 mb-2">
-              <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm ${profit >= 0 ? 'bg-emerald-100' : 'bg-red-100'}`}>
+              <div
+                className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm ${profit >= 0 ? 'bg-emerald-100' : 'bg-red-100'
+                  }`}
+              >
                 {profit >= 0 ? '📈' : '📉'}
               </div>
               <p className="text-[12px] text-gray-500 font-medium">Keuntungan</p>
             </div>
             <p
-              className={`text-[22px] font-extrabold leading-tight ${profit >= 0 ? 'text-emerald-700' : 'text-red-600'}`}
+              className={`text-[22px] font-extrabold leading-tight ${profit >= 0 ? 'text-emerald-700' : 'text-red-600'
+                }`}
               style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}
             >
               {formatRupiah(profit)}
             </p>
-            <p className="text-[11px] text-gray-400 mt-1">{profit >= 0 ? 'Untung' : 'Rugi'}</p>
+            <p className="text-[11px] text-gray-400 mt-1">
+              {profit >= 0 ? 'Untung' : 'Rugi'}
+            </p>
           </div>
 
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+          <Link
+            href="/petani/produk"
+            className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 hover:border-green-200 hover:shadow-md transition-all group min-h-0"
+          >
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center text-sm">🌾</div>
+              <div className="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center text-sm">
+                🌾
+              </div>
               <p className="text-[12px] text-gray-500 font-medium">Produk Aktif</p>
             </div>
             <p
@@ -213,43 +254,58 @@ export default async function PetaniDashboardPage() {
             >
               {activeProductCount ?? 0}
             </p>
-            <p className="text-[11px] text-gray-400 mt-1">Di marketplace</p>
-          </div>
+            <p className="text-[11px] text-gray-400 mt-1 group-hover:text-green-600 transition-colors">
+              Kelola produk →
+            </p>
+          </Link>
         </div>
 
         {/* Quick Access */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-[16px] font-bold text-gray-900">Akses Cepat</h2>
-            <Link href="/petani/profil" className="text-[13px] text-green-600 font-semibold hover:underline min-h-0 touch-target-exempt">
+            <Link
+              href="/petani/profil"
+              className="text-[13px] text-green-600 font-semibold hover:underline min-h-0 touch-target-exempt"
+            >
               Profil →
             </Link>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
             {QUICK_LINKS.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`group min-h-0 ${link.featured ? 'col-span-1 sm:col-span-1' : ''}`}
+                className="group min-h-0"
               >
                 {link.gradient ? (
-                  <div className={`bg-gradient-to-br ${link.gradient} rounded-2xl p-4 h-full flex flex-col justify-between min-h-[100px] relative overflow-hidden shadow-md hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5`}>
+                  <div
+                    className={`bg-gradient-to-br ${link.gradient} rounded-2xl p-4 h-full flex flex-col justify-between min-h-[100px] relative overflow-hidden shadow-md hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5`}
+                  >
                     <div className="absolute top-2 right-2 bg-white/20 backdrop-blur-sm rounded-full px-2 py-0.5 text-[10px] font-bold text-white">
                       AI
                     </div>
                     <div className="text-3xl mb-2">{link.icon}</div>
                     <div>
-                      <p className="font-bold text-white text-[14px] leading-tight">{link.label}</p>
-                      <p className="text-white/70 text-[11px] mt-0.5">{link.desc}</p>
+                      <p className="font-bold text-white text-[14px] leading-tight">
+                        {link.label}
+                      </p>
+                      <p className="text-white/70 text-[11px] mt-0.5">
+                        {link.desc}
+                      </p>
                     </div>
                   </div>
                 ) : (
                   <div className="bg-white border border-gray-100 rounded-2xl p-4 h-full flex flex-col justify-between min-h-[100px] shadow-sm hover:shadow-md hover:border-green-200 transition-all duration-200 hover:-translate-y-0.5">
                     <div className="text-3xl mb-2">{link.icon}</div>
                     <div>
-                      <p className="font-semibold text-gray-900 text-[14px] leading-tight">{link.label}</p>
-                      <p className="text-gray-500 text-[11px] mt-0.5">{link.desc}</p>
+                      <p className="font-semibold text-gray-900 text-[14px] leading-tight">
+                        {link.label}
+                      </p>
+                      <p className="text-gray-500 text-[11px] mt-0.5">
+                        {link.desc}
+                      </p>
                     </div>
                   </div>
                 )}
@@ -263,9 +319,12 @@ export default async function PetaniDashboardPage() {
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-6 text-center">
               <div className="text-5xl mb-3 animate-float">🌱</div>
-              <h3 className="text-[18px] font-bold text-gray-900 mb-2">Siap panen?</h3>
+              <h3 className="text-[18px] font-bold text-gray-900 mb-2">
+                Siap panen?
+              </h3>
               <p className="text-gray-600 text-[14px] mb-4 max-w-xs mx-auto">
-                Mulai catat modal & pendapatan agar dashboard bisa memberi insight untukmu.
+                Mulai catat modal & pendapatan agar dashboard bisa memberi
+                insight untukmu.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <Link
@@ -293,10 +352,16 @@ export default async function PetaniDashboardPage() {
 
         {/* Info Bar */}
         <div className="flex gap-3 items-center bg-white border border-gray-100 rounded-2xl px-4 py-3 shadow-sm">
-          <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-lg shrink-0">💹</div>
+          <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-lg shrink-0">
+            💹
+          </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold text-gray-900">Info Harga Pangan Hari Ini</p>
-            <p className="text-[12px] text-gray-500 hidden sm:block">Data resmi Bapanas & PIHPS BI, gratis untuk umum</p>
+            <p className="text-[13px] font-semibold text-gray-900">
+              Info Harga Pangan Hari Ini
+            </p>
+            <p className="text-[12px] text-gray-500 hidden sm:block">
+              Data resmi Bapanas & PIHPS BI, gratis untuk umum
+            </p>
           </div>
           <Link
             href="/harga-pangan"

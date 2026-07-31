@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
-import type { Tables } from '@/lib/supabase/client'
 import { AdminSidebar } from './_components/AdminSidebar'
 
 export default async function AdminLayout({
@@ -13,25 +12,35 @@ export default async function AdminLayout({
 
   if (!user) redirect('/login?redirect=/admin/dashboard')
 
-  // Cek apakah user adalah admin
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('role, full_name')
+    .select('role, roles, full_name')
     .eq('id', user.id)
     .single()
 
-  const profile = profileData as Pick<Tables<'profiles'>, 'role' | 'full_name'> | null
+  const profile = profileData as {
+    role: string | null
+    roles: string[] | null
+    full_name: string
+  } | null
 
-  if (!profile || profile.role !== 'admin') {
+  if (!profile) {
+    redirect('/unauthorized')
+  }
+
+  // Hanya role 'admin' yang boleh akses panel admin — tidak boleh di-bypass
+  const userRoles: string[] = profile.roles ?? (profile.role ? [profile.role] : [])
+  const hasAdminAccess =
+    userRoles.includes('admin') ||
+    profile.role === 'admin'
+
+  if (!hasAdminAccess) {
     redirect('/unauthorized')
   }
 
   return (
     <div className="min-h-screen bg-surface flex flex-col lg:flex-row">
-      {/* Sidebar */}
-      <AdminSidebar adminName={profile.full_name} />
-
-      {/* Main content */}
+      <AdminSidebar adminName={profile.full_name} userRoles={userRoles} />
       <main className="flex-1 lg:ml-64 min-w-0">
         {children}
       </main>

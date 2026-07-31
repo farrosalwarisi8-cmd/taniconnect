@@ -14,37 +14,50 @@ module.exports = {
         // Primary Green
         'primary': {
           DEFAULT: '#4ADE80',
-          dark:    '#15803D',
-          light:   '#86EFAC',
+          dark: '#15803D',
+          light: '#86EFAC',
         },
         // Teal aksen
         'teal': {
           DEFAULT: '#6EE7B7',
+          dark: '#0D9488',
+          light: '#99F6E4',
+        },
+        // Amber / Warning
+        'amber': {
+          DEFAULT: '#F59E0B',
+          dark: '#B45309',
+          light: '#FDE68A',
         },
         // Semantic
-        'success':  '#16A34A',
-        'error':    '#EF4444',
+        'success': '#16A34A',
+        'warning': '#F59E0B',
+        'error': '#EF4444',
+        'info': '#3B82F6',
         // Foreground / Text
         'fg': {
           DEFAULT: '#374151',
-          dark:    '#111827',
+          dark: '#111827',
         },
         // Backgrounds
         'surface': {
           DEFAULT: '#F9FAFB',
-          white:   '#FFFFFF',
+          white: '#FFFFFF',
+          light: '#F0FDF4',
         },
+        // Surface light alias for green-tinted backgrounds
+        'surface-light': '#F0FDF4',
         // Border
         'border': {
           DEFAULT: '#D1D5DB',
-          light:   '#E5E7EB',
+          light: '#E5E7EB',
         },
         // Status chip backgrounds
         'chip': {
           success: '#DCFCE7',
           warning: '#FEF3C7',
-          info:    '#EFF6FF',
-          error:   '#FEE2E2',
+          info: '#EFF6FF',
+          error: '#FEE2E2',
           neutral: '#F3F4F6',
         },
       },
@@ -52,7 +65,7 @@ module.exports = {
       // ─── TIPOGRAFI ─────────────────────────────────────────────
       fontFamily: {
         display: ['"Bricolage Grotesque"', 'ui-sans-serif', 'system-ui'],
-        sans:    ['ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       fontSize: {
         // Display/H1 — HANYA untuk hero
@@ -75,77 +88,82 @@ module.exports = {
 
       // ─── BORDER RADIUS ─────────────────────────────────────────
       borderRadius: {
-        'badge':  '6px',
-        'btn':    '12px',
-        'card':   '16px',
-        'card-sm':'12px',
-        'full':   '9999px',
+        DEFAULT: '8px',
+        'sm': '6px',
+        'badge': '6px',
+        'btn': '12px',
+        'card': '16px',
+        'card-sm': '12px',
+        'lg': '16px',
+        'xl': '20px',
+        '2xl': '24px',
+        'full': '9999px',
         'circle': '50%',
       },
 
       // ─── SPACING (base 4px) ────────────────────────────────────
       spacing: {
-        '1':  '4px',
-        '2':  '8px',
-        '3':  '12px',
-        '4':  '16px',
-        '5':  '20px',
-        '6':  '24px',
-        '8':  '32px',
+        '1': '4px',
+        '2': '8px',
+        '3': '12px',
+        '4': '16px',
+        '5': '20px',
+        '6': '24px',
+        '8': '32px',
         '12': '48px',
         '16': '64px',
       },
 
       // ─── SHADOW / ELEVATION ────────────────────────────────────
       boxShadow: {
-        'flat':   '0 0 0 1px #D1D5DB',
-        'sm':     '0px 4px 6px -1px rgba(0,0,0,0.1)',
-        'md':     '0px 16px 44px 0px rgba(15,23,42,0.12)',
-        'lg':     '0px 18px 46px 0px rgba(15,118,67,0.22)',
-        'btn-primary':   '0px 8px 16px -2px rgba(74,222,128,0.25)',
+        'flat': '0 0 0 1px #D1D5DB',
+        'sm': '0px 4px 6px -1px rgba(0,0,0,0.1)',
+        'md': '0px 16px 44px 0px rgba(15,23,42,0.12)',
+        'lg': '0px 18px 46px 0px rgba(15,118,67,0.22)',
+        'btn-primary': '0px 8px 16px -2px rgba(74,222,128,0.25)',
         'btn-secondary': '0px 16px 44px 0px rgba(15,23,42,0.12)',
-        'nav':    '0px 4px 18px -6px rgba(22,163,74,0.14), 0px 1px 4px 0px rgba(0,0,0,0.04), inset 0px 1px 0px 0px rgba(255,255,255,0.8)',
-        'modal':  '0px 24px 64px 0px rgba(15,23,42,0.3)',
+        'nav': '0px 4px 18px -6px rgba(22,163,74,0.14), 0px 1px 4px 0px rgba(0,0,0,0.04), inset 0px 1px 0px 0px rgba(255,255,255,0.8)',
+        'modal': '0px 24px 64px 0px rgba(15,23,42,0.3)',
         'icon-btn': '0px 4px 6px -1px rgba(0,0,0,0.1)',
-        'focus':  '0 0 0 3px rgba(74, 222, 128, 0.3)',
+        'focus': '0 0 0 3px rgba(74, 222, 128, 0.3)',
       },
 
       // ─── BREAKPOINTS ──────────────────────────────────────────
       screens: {
-        'sm':   '640px',
-        'md':   '768px',
-        'lg':   '1024px',
-        'xl':   '1280px',
-        '2xl':  '1440px',
+        'sm': '640px',
+        'md': '768px',
+        'lg': '1024px',
+        'xl': '1280px',
+        '2xl': '1440px',
       },
 
       // ─── MAX WIDTH ────────────────────────────────────────────
       maxWidth: {
         'container': '1440px',
-        'modal':     '480px',
+        'modal': '480px',
       },
 
       // ─── ANIMASI ─────────────────────────────────────────────
       keyframes: {
         shimmer: {
-          '0%':   { backgroundPosition: '-200% 0' },
+          '0%': { backgroundPosition: '-200% 0' },
           '100%': { backgroundPosition: '200% 0' },
         },
         'slide-in-right': {
-          '0%':   { transform: 'translateX(100%)', opacity: '0' },
-          '100%': { transform: 'translateX(0)',    opacity: '1' },
+          '0%': { transform: 'translateX(100%)', opacity: '0' },
+          '100%': { transform: 'translateX(0)', opacity: '1' },
         },
         'slide-out-right': {
-          '0%':   { transform: 'translateX(0)',    opacity: '1' },
+          '0%': { transform: 'translateX(0)', opacity: '1' },
           '100%': { transform: 'translateX(100%)', opacity: '0' },
         },
         'bounce-dot': {
           '0%, 100%': { transform: 'translateY(0)' },
-          '50%':      { transform: 'translateY(-4px)' },
+          '50%': { transform: 'translateY(-4px)' },
         },
         'pulse-dot': {
           '0%, 100%': { transform: 'scaleY(0.4)', opacity: '0.6' },
-          '50%':      { transform: 'scaleY(1)',   opacity: '1' },
+          '50%': { transform: 'scaleY(1)', opacity: '1' },
         },
         'glow-pulse': {
           '0%, 100%': {
@@ -157,12 +175,12 @@ module.exports = {
         },
       },
       animation: {
-        'shimmer':        'shimmer 1.5s infinite linear',
+        'shimmer': 'shimmer 1.5s infinite linear',
         'slide-in-right': 'slide-in-right 0.3s ease-out',
-        'slide-out-right':'slide-out-right 0.3s ease-in',
-        'bounce-dot':     'bounce-dot 1s infinite',
-        'pulse-dot':      'pulse-dot 1s ease-in-out infinite',
-        'glow-pulse':     'glow-pulse 2s ease-in-out infinite',
+        'slide-out-right': 'slide-out-right 0.3s ease-in',
+        'bounce-dot': 'bounce-dot 1s infinite',
+        'pulse-dot': 'pulse-dot 1s ease-in-out infinite',
+        'glow-pulse': 'glow-pulse 2s ease-in-out infinite',
       },
     },
   },

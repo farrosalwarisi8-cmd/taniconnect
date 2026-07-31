@@ -1,11 +1,34 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+// Route yang harus login
+const PROTECTED_PREFIXES = [
+  '/petani',
+  '/pembeli',
+  '/penyedia',
+  '/admin',
+  '/pilih-peran',
+]
+
+// Route yang hanya bisa diakses ketika BELUM login
+const AUTH_ONLY_ROUTES = ['/login', '/register']
+
+// Pemetaan prefix route ke role yang diizinkan
+// Catatan: middleware hanya cek role aktif (profile.role)
+// Role check per-dashboard juga dilakukan di layout masing-masing
+const ROLE_REQUIRED: Record<string, string[]> = {
+  '/admin': ['admin'],
+  '/petani': ['petani', 'admin'],
+  '/penyedia': ['penyedia_alat', 'admin'],
+  '/pembeli': ['pembeli', 'petani', 'penyedia_alat', 'admin'], // semua bisa akses marketplace
+}
+
 export async function middleware(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const { pathname } = request.nextUrl
 
-  // Kalau ENV belum kebaca, jangan crash seluruh app
+  // Kalau ENV belum dikonfigurasi, skip middleware (dev fallback)
   if (!supabaseUrl || !supabaseAnonKey) {
     return NextResponse.next()
   }
@@ -27,14 +50,72 @@ export async function middleware(request: NextRequest) {
     },
   })
 
-  // Refresh session — WAJIB untuk keep session valid & role ke-detect
-  await supabase.auth.getUser()
+  // Refresh session — wajib untuk keep session valid
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // ─── Redirect user yang sudah login dari halaman auth ────────────
+  if (user && AUTH_ONLY_ROUTES.some(r => pathname.startsWith(r))) {
+    // Ambil role dari profile untuk redirect yang tepat
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    const role = (profile as any)?.role ?? 'pembeli'
+    const roleRedirects: Record<string, string> = {
+      petani: '/petani/dashboard',
+      pembeli: '/pembeli/marketplace',
+      penyedia_alat: '/penyedia/dashboard',
+      admin: '/admin/dashboard',
+    }
+    const destination = roleRedirects[role] ?? '/pembeli/marketplace'
+    return NextResponse.redirect(new URL(destination, request.url))
+  }
+
+  // ─── Protect route yang butuh login ──────────────────────────────
+  const isProtected = PROTECTED_PREFIXES.some(prefix => pathname.startsWith(prefix))
+  if (isProtected && !user) {
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('redirect', pathname)
+    return NextResponse.redirect(loginUrl)
+  }
+
+  // ─── Role-based access control ───────────────────────────────────
+  if (user && isProtected) {
+    const matchedPrefix = Object.keys(ROLE_REQUIRED).find(prefix =>
+      pathname.startsWith(prefix)
+    )
+
+    if (matchedPrefix) {
+      const allowedRoles = ROLE_REQUIRED[matchedPrefix]
+
+      // Ambil role aktif dari profiles (bukan dari JWT metadata karena bisa stale)
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, roles')
+        .eq('id', user.id)
+        .single()
+
+      const activeRole = (profile as any)?.role as string | undefined
+      const userRoles: string[] = (profile as any)?.roles ?? (activeRole ? [activeRole] : [])
+
+      // Cek apakah role aktif atau salah satu role yang dimiliki ada di allowed
+      const hasAccess =
+        (activeRole && allowedRoles.includes(activeRole)) ||
+        userRoles.some(r => allowedRoles.includes(r))
+
+      if (!hasAccess) {
+        return NextResponse.redirect(new URL('/unauthorized', request.url))
+      }
+    }
+  }
 
   return response
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|icons|manifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|json)$).*)',
   ],
 }

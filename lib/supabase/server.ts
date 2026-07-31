@@ -3,9 +3,16 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import type { Database } from './client'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder-project.supabase.co'
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsYWNlaG9sZGVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE2MDAwMDAwMDAsImV4cCI6MjAwMDAwMDAwMH0.placeholder'
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsYWNlaG9sZGVyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTYwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMDAwfQ.placeholder'
+function requireEnv(key: string): string {
+  const value = process.env[key]
+  if (!value) {
+    throw new Error(
+      `Environment variable ${key} is not set. ` +
+      'Please configure it in .env.local before running the application.'
+    )
+  }
+  return value
+}
 
 /**
  * Supabase client untuk Server Components, Server Actions, dan Route Handlers.
@@ -13,9 +20,12 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJh
 export async function createServerSupabaseClient() {
   const cookieStore = await cookies()
 
-  const client = createServerClient<Database>(
-    SUPABASE_URL,
-    SUPABASE_ANON_KEY,
+  const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL')
+  const supabaseAnonKey = requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
+
+  return createServerClient<Database>(
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
@@ -27,18 +37,17 @@ export async function createServerSupabaseClient() {
               cookieStore.set(name, value, options)
             )
           } catch {
-            // Server Component tidak bisa set cookies
+            // Server Component tidak bisa set cookies — handled by middleware
           }
         },
       },
     }
   )
-
-  return client as any
 }
 
 /**
  * Supabase Admin client dengan Service Role Key.
+ * HANYA boleh dipanggil di server-side (Route Handlers / Server Actions).
  */
 export function createAdminSupabaseClient() {
   if (typeof window !== 'undefined') {
@@ -47,9 +56,12 @@ export function createAdminSupabaseClient() {
     )
   }
 
-  const client = createSupabaseClient<Database>(
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
+  const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL')
+  const serviceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY')
+
+  return createSupabaseClient<Database>(
+    supabaseUrl,
+    serviceRoleKey,
     {
       auth: {
         autoRefreshToken: false,
@@ -57,6 +69,4 @@ export function createAdminSupabaseClient() {
       },
     }
   )
-
-  return client as any
 }

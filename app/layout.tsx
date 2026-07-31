@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { PWAProvider } from '@/components/PWAProvider'
+import { Navbar } from '@/components/Navbar'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -132,6 +133,7 @@ export default function RootLayout({
         <meta name="format-detection" content="telephone=no" />
       </head>
       <body className="antialiased min-h-screen bg-white text-fg">
+        <Navbar />
         {children}
 
         {/* ⭐ PWA Provider — register service worker + install prompt */}

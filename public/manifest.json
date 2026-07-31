@@ -1,57 +1,19 @@
 {
   "name": "TaniConnect — Platform Ekosistem Pertanian Indonesia",
   "short_name": "TaniConnect",
-  "description": "Marketplace pertanian, AI penyuluh, prediksi harga, dan info harga pangan real-time untuk petani Indonesia.",
+  "description": "Marketplace pertanian, AI penyuluh, prediksi harga, dan info harga pangan real-time.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#15803D",
   "theme_color": "#15803D",
   "lang": "id",
-  "dir": "ltr",
-  "categories": ["business", "productivity", "shopping", "utilities"],
   "icons": [
-    {
-      "src": "/icons/icon-72.png",
-      "sizes": "72x72",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icons/icon-96.png",
-      "sizes": "96x96",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icons/icon-128.png",
-      "sizes": "128x128",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icons/icon-144.png",
-      "sizes": "144x144",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icons/icon-152.png",
-      "sizes": "152x152",
-      "type": "image/png",
-      "purpose": "any"
-    },
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
-    },
-    {
-      "src": "/icons/icon-384.png",
-      "sizes": "384x384",
-      "type": "image/png",
-      "purpose": "any"
     },
     {
       "src": "/icons/icon-512.png",
@@ -63,24 +25,33 @@
   "shortcuts": [
     {
       "name": "Marketplace",
-      "short_name": "Beli",
-      "description": "Jelajahi hasil panen segar",
       "url": "/pembeli/marketplace",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     },
     {
       "name": "Tanya AI",
-      "short_name": "AI",
-      "description": "Chat dengan Pak Tani AI",
       "url": "/tanya-ai",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     },
     {
       "name": "Harga Pangan",
-      "short_name": "Harga",
-      "description": "Info harga pangan hari ini",
       "url": "/harga-pangan",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }
