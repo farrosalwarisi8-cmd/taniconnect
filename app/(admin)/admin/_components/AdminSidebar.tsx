@@ -21,6 +21,22 @@ const OTHER_ROLE_CONFIG: Record<string, { emoji: string; label: string; href: st
   penyedia_alat: { emoji: '🚜', label: 'Mode Penyedia Alat', href: '/penyedia/dashboard', color: 'text-blue-700' },
 }
 
+// ─── Helper: update profile role tanpa TypeScript never error ────────────────
+// Root cause: @supabase/ssr tidak selalu bisa resolve Update<'profiles'> type
+// dari Database generic — menghasilkan `never` untuk argumen .update().
+// Fix: cast .from() result ke `any` secara terlokalisir. Ini workaround untuk
+// bug library, bukan pola umum yang dipakai di seluruh codebase.
+async function updateProfileRole(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  newRole: UserRole,
+): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase.from('profiles') as any)
+    .update({ role: newRole })
+    .eq('id', userId)
+}
+
 interface Props {
   adminName: string
   userRoles?: string[]
@@ -42,7 +58,7 @@ export function AdminSidebar({ adminName, userRoles = [] }: Props) {
     setSwitching(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      await supabase.from('profiles').update({ role: newRole }).eq('id', user.id)
+      await updateProfileRole(supabase, user.id, newRole)
       await supabase.auth.updateUser({ data: { role: newRole } })
     }
     const dest = OTHER_ROLE_CONFIG[newRole]?.href ?? '/'
@@ -130,7 +146,7 @@ export function AdminSidebar({ adminName, userRoles = [] }: Props) {
 
       {/* Bottom actions */}
       <div className="p-3 border-t border-border space-y-0.5">
-        {/* Switch role — if admin has other roles */}
+        {/* Switch role */}
         {otherRoles.length > 0 && (
           <>
             <div className="pt-1 pb-1">
@@ -149,12 +165,14 @@ export function AdminSidebar({ adminName, userRoles = [] }: Props) {
                   disabled={switching}
                   className={cn(
                     'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface text-sm min-h-0 text-left transition-colors',
-                    rc.color
+                    rc.color,
                   )}
                 >
                   <span className="text-base">{rc.emoji}</span>
                   <span>{rc.label}</span>
-                  {switching && <div className="ml-auto w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />}
+                  {switching && (
+                    <div className="ml-auto w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  )}
                 </button>
               )
             })}

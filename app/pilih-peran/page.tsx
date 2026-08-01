@@ -51,6 +51,29 @@ const ROLE_DESTINATIONS: Record<SelectableRole, string> = {
   penyedia_alat: '/penyedia/dashboard',
 }
 
+// ─── Helper: update roles + role aktif tanpa TypeScript never error ───────────
+// Root cause: @supabase/ssr tidak selalu resolve Update<'profiles'> type
+// dari Database generic — menghasilkan `never` untuk argumen .update().
+// Fix: cast .from() result ke `any` secara terlokalisir.
+async function updateProfileRoles(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  roles: SelectableRole[],
+  activeRole: SelectableRole,
+): Promise<{ error: Error | null }> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase.from('profiles') as any)
+      .update({ roles, role: activeRole })
+      .eq('id', userId)
+
+    return { error: error ?? null }
+  } catch (err) {
+    return { error: err instanceof Error ? err : new Error(String(err)) }
+  }
+}
+
+// ─── Main content ─────────────────────────────────────────────────────────────
 function PilihPeranContent() {
   const router = useRouter()
   const { toast } = useToast()
@@ -73,17 +96,18 @@ function PilihPeranContent() {
         return
       }
 
-      // Ambil role yang sudah ada
       const { data: profile } = await supabase
         .from('profiles')
         .select('role, roles')
         .eq('id', user.id)
         .single()
 
+      // Cast untuk bypass never inference — sama seperti di file asli
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const profileAny = profile as any
       const currentRole = profileAny?.role as SelectableRole | undefined
-      const currentRoles: SelectableRole[] = (profileAny?.roles as SelectableRole[]) ??
-        (currentRole ? [currentRole] : [])
+      const currentRoles: SelectableRole[] =
+        (profileAny?.roles as SelectableRole[]) ?? (currentRole ? [currentRole] : [])
 
       setUserId(user.id)
       setExistingRoles(currentRoles)
@@ -98,7 +122,6 @@ function PilihPeranContent() {
     setSelectedRoles(prev => {
       const next = new Set(prev)
       if (next.has(role)) {
-        // Tidak bisa hapus role jika hanya tinggal satu
         if (next.size === 1) {
           toast('Kamu harus punya minimal 1 peran', 'warning')
           return prev
@@ -127,33 +150,28 @@ function PilihPeranContent() {
     try {
       const rolesArray = Array.from(selectedRoles)
 
-      // Tentukan active role:
-      // 1. Kalau role yang sudah aktif masih di list, pertahankan
-      // 2. Kalau ada role baru yang ditambah, pakai yang pertama ditambah
-      // 3. Default ke role pertama dalam list
+      // Tentukan active role
       let newActiveRole: SelectableRole
       if (activeRole && selectedRoles.has(activeRole)) {
         newActiveRole = activeRole
       } else if (rolesArray.length > 0) {
-        // Cari role baru yang ditambahkan
         const addedRole = rolesArray.find(r => !existingRoles.includes(r))
         newActiveRole = addedRole ?? rolesArray[0]
       } else {
         newActiveRole = 'pembeli'
       }
 
-      // Update roles + role aktif di profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          roles: rolesArray,
-          role: newActiveRole,
-        })
-        .eq('id', userId)
+      // ── Update roles + role aktif di profile ─────────────────────────────
+      const { error: profileError } = await updateProfileRoles(
+        supabase,
+        userId,
+        rolesArray,
+        newActiveRole,
+      )
 
       if (profileError) throw profileError
 
-      // Update juga di auth metadata
+      // ── Update auth metadata ──────────────────────────────────────────────
       await supabase.auth.updateUser({
         data: { role: newActiveRole, roles: rolesArray },
       })
@@ -174,6 +192,7 @@ function PilihPeranContent() {
     }
   }
 
+  // ── Loading state ──────────────────────────────────────────────────────────
   if (checking) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-50">
@@ -185,6 +204,7 @@ function PilihPeranContent() {
     )
   }
 
+  // ── Main UI ────────────────────────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-green-50">
       {/* Header */}
@@ -223,8 +243,6 @@ function PilihPeranContent() {
               ? 'Tambah atau hapus peran. Kamu bisa punya lebih dari satu peran sekaligus.'
               : 'Pilih satu atau lebih peran untuk pengalaman yang paling sesuai.'}
           </p>
-
-          {/* Multi-role badge info */}
           <div className="mt-4 inline-flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-sm font-medium px-4 py-2 rounded-full">
             ✨ Kamu bisa pilih lebih dari satu peran sekaligus!
           </div>
@@ -252,11 +270,7 @@ function PilihPeranContent() {
                 )}
               >
                 {/* Gradient header */}
-                <div className={cn(
-                  'p-5 bg-gradient-to-br text-white relative',
-                  role.gradient
-                )}>
-                  {/* Active badge */}
+                <div className={cn('p-5 bg-gradient-to-br text-white relative', role.gradient)}>
                   {isActive && (
                     <span className="absolute top-3 right-3 bg-white/30 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
                       AKTIF
@@ -273,13 +287,13 @@ function PilihPeranContent() {
 
                 {/* Card body */}
                 <div className="p-4">
-                  <p className="text-sm text-fg/70 leading-relaxed mb-3">
-                    {role.description}
-                  </p>
+                  <p className="text-sm text-fg/70 leading-relaxed mb-3">{role.description}</p>
                   <ul className="space-y-1">
                     {role.features.map(f => (
                       <li key={f} className="flex items-center gap-2 text-xs text-fg/60">
-                        <span className="w-4 h-4 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-[10px] shrink-0">✓</span>
+                        <span className="w-4 h-4 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-[10px] shrink-0">
+                          ✓
+                        </span>
                         {f}
                       </li>
                     ))}
@@ -288,13 +302,13 @@ function PilihPeranContent() {
                   {/* Selection indicator */}
                   <div className={cn(
                     'mt-4 flex items-center gap-2 text-sm font-semibold transition-all',
-                    isSelected ? 'text-primary-dark' : 'text-fg/40'
+                    isSelected ? 'text-primary-dark' : 'text-fg/40',
                   )}>
                     <div className={cn(
                       'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all',
                       isSelected
                         ? 'border-primary-dark bg-primary-dark text-white'
-                        : 'border-border'
+                        : 'border-border',
                     )}>
                       {isSelected && <span className="text-[10px]">✓</span>}
                     </div>
@@ -316,7 +330,10 @@ function PilihPeranContent() {
               {Array.from(selectedRoles).map(role => {
                 const r = ROLES.find(x => x.value === role)!
                 return (
-                  <span key={role} className="inline-flex items-center gap-1 bg-white border border-green-300 text-green-700 text-sm font-medium px-3 py-1 rounded-full">
+                  <span
+                    key={role}
+                    className="inline-flex items-center gap-1 bg-white border border-green-300 text-green-700 text-sm font-medium px-3 py-1 rounded-full"
+                  >
                     {r.emoji} {r.title}
                   </span>
                 )
@@ -350,6 +367,7 @@ function PilihPeranContent() {
   )
 }
 
+// ─── Page export ──────────────────────────────────────────────────────────────
 export default function PilihPeranPage() {
   return (
     <ToastProvider>

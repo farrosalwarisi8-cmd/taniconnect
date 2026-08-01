@@ -12,15 +12,15 @@ import { createClient } from '@/lib/supabase/client'
 import { loginSchema, type LoginInput } from '@/lib/validations'
 import { normalizePhoneID } from '@/lib/utils'
 import type { UserRole } from '@/lib/supabase/client'
+import { ROLE_CONFIG } from '@/lib/role-config'
 
-// ─── Role Selector Modal ──────────────────────────────────────
-const ROLE_CONFIG: Record<UserRole, { emoji: string; label: string; href: string }> = {
-  petani: { emoji: '🌾', label: 'Petani', href: '/petani/dashboard' },
-  pembeli: { emoji: '🛒', label: 'Pembeli', href: '/pembeli/marketplace' },
-  penyedia_alat: { emoji: '🚜', label: 'Penyedia Alat', href: '/penyedia/dashboard' },
-  admin: { emoji: '🔐', label: 'Administrator', href: '/admin/dashboard' },
+// ─── Type helpers ─────────────────────────────────────────────────────────────
+interface ProfileRoleData {
+  role: UserRole | null
+  roles: UserRole[] | null
 }
 
+// ─── Role Selector Modal ──────────────────────────────────────────────────────
 interface RoleSelectorModalProps {
   roles: UserRole[]
   onSelect: (role: UserRole) => void
@@ -29,23 +29,17 @@ interface RoleSelectorModalProps {
 function RoleSelectorModal({ roles, onSelect }: RoleSelectorModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-
-      {/* Modal */}
       <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-modal w-full max-w-sm p-6 animate-scale-in">
-        {/* Icon */}
         <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-dark to-primary mx-auto mb-4 flex items-center justify-center text-3xl">
           🌿
         </div>
-
         <h2 className="text-xl font-bold text-fg-dark text-center mb-1">
           Masuk sebagai siapa?
         </h2>
         <p className="text-sm text-fg/60 text-center mb-6">
           Kamu punya {roles.length} peran. Pilih dashboard yang ingin kamu buka sekarang.
         </p>
-
         <div className="space-y-2">
           {roles.map(role => {
             const config = ROLE_CONFIG[role]
@@ -72,12 +66,28 @@ function RoleSelectorModal({ roles, onSelect }: RoleSelectorModalProps) {
   )
 }
 
-// ─── Login Form ───────────────────────────────────────────────
+// ─── Helper: update profile role tanpa TypeScript never error ────────────────
+// Root cause: @supabase/ssr tidak selalu bisa resolve Update<'profiles'> type
+// dari Database generic — menghasilkan `never` untuk argumen .update().
+// Fix: cast .from() result ke `any` secara terlokalisir.
+async function updateProfileRole(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  newRole: UserRole,
+): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase.from('profiles') as any)
+    .update({ role: newRole })
+    .eq('id', userId)
+}
+
+// ─── Login Form ───────────────────────────────────────────────────────────────
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
   const supabase = createClient()
+
   const [loading, setLoading] = useState(false)
   const [showRoleSelector, setShowRoleSelector] = useState(false)
   const [availableRoles, setAvailableRoles] = useState<UserRole[]>([])
@@ -93,13 +103,13 @@ function LoginForm() {
     resolver: zodResolver(loginSchema),
   })
 
+  // ── handleRoleSelect ────────────────────────────────────────────────────────
   const handleRoleSelect = async (selectedRole: UserRole) => {
     setShowRoleSelector(false)
 
-    // Update role aktif di profile dan auth metadata
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      await supabase.from('profiles').update({ role: selectedRole }).eq('id', user.id)
+      await updateProfileRole(supabase, user.id, selectedRole)
       await supabase.auth.updateUser({ data: { role: selectedRole } })
     }
 
@@ -107,39 +117,45 @@ function LoginForm() {
     window.location.href = destination
   }
 
+  // ── onSubmit ────────────────────────────────────────────────────────────────
   const onSubmit = async (data: LoginInput) => {
     setLoading(true)
     try {
       const phone = normalizePhoneID(data.phone)
 
-      // ─── 1. Cari email berdasarkan phone ─────────────────────
-      const { data: profiles, error: profileError } = await supabase
-        .from('profiles')
-        .select('email, role, roles')
-        .eq('phone', phone)
-        .limit(1)
+      // ─── 1. Resolve email via server-side API ─────────────────────────────
+      let resolvedEmail: string | null = null
 
-      if (profileError) {
-        toast('Terjadi kesalahan sistem, coba lagi', 'error')
-        return
+      try {
+        const resolveRes = await fetch('/api/auth/resolve-phone', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone }),
+        })
+
+        if (resolveRes.ok) {
+          const resolveData: unknown = await resolveRes.json()
+          if (
+            resolveData !== null &&
+            typeof resolveData === 'object' &&
+            'email' in resolveData
+          ) {
+            const emailVal = (resolveData as { email: unknown }).email
+            resolvedEmail = typeof emailVal === 'string' ? emailVal : null
+          }
+        }
+      } catch {
+        resolvedEmail = null
       }
 
-      if (!profiles || profiles.length === 0) {
-        // Pesan generik untuk cegah user enumeration
+      if (!resolvedEmail) {
         toast('Nomor HP atau password salah', 'error')
         return
       }
 
-      const profile = profiles[0] as { email: string | null; role: UserRole; roles: UserRole[] | null }
-
-      if (!profile.email) {
-        toast('Data akun tidak lengkap. Hubungi admin.', 'error')
-        return
-      }
-
-      // ─── 2. Login dengan email + password ────────────────────
+      // ─── 2. Login dengan email + password ────────────────────────────────
       const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: profile.email,
+        email: resolvedEmail,
         password: data.password,
       })
 
@@ -150,30 +166,38 @@ function LoginForm() {
 
       toast('Berhasil masuk! Mengalihkan...', 'success', 2000)
 
-      // ─── 3. Tentukan redirect berdasarkan role ────────────────
-      // Normalisasi roles — support user lama yang belum punya kolom roles
-      const userRoles: UserRole[] = (profile.roles && profile.roles.length > 0)
-        ? profile.roles
-        : [profile.role ?? 'pembeli']
+      // ─── 3. Fetch profile untuk data roles (post-auth) ───────────────────
+      const { data: rawProfile } = await supabase
+        .from('profiles')
+        .select('role, roles')
+        .eq('id', authData.user.id)
+        .single()
 
-      // Kalau ada explicit redirect, langsung navigasi
+      const profileData = rawProfile as ProfileRoleData | null
+
+      const userRoles: UserRole[] =
+        profileData?.roles && profileData.roles.length > 0
+          ? profileData.roles
+          : profileData?.role
+            ? [profileData.role]
+            : ['pembeli']
+
       if (redirectTo) {
         setTimeout(() => { window.location.href = redirectTo }, 800)
         return
       }
 
-      // Kalau punya >1 role, tampilkan modal pilih role
       if (userRoles.length > 1) {
         setAvailableRoles(userRoles)
-        setActiveRole(profile.role)
+        setActiveRole(profileData?.role ?? null)
         setLoading(false)
         setTimeout(() => setShowRoleSelector(true), 800)
         return
       }
 
-      // Single role: langsung redirect
       const destination = ROLE_CONFIG[userRoles[0]]?.href ?? '/pembeli/marketplace'
       setTimeout(() => { window.location.href = destination }, 800)
+
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'coba lagi nanti'
       toast(`Gagal masuk: ${message}`, 'error')
@@ -182,6 +206,7 @@ function LoginForm() {
     }
   }
 
+  // ── JSX ───────────────────────────────────────────────────────────────────
   return (
     <>
       {showRoleSelector && (
@@ -270,7 +295,7 @@ function LoginForm() {
   )
 }
 
-// ─── Loading Fallback saat Suspense boundary aktif ───────────
+// ─── Loading Fallback ─────────────────────────────────────────────────────────
 function LoginLoadingFallback() {
   return (
     <main className="min-h-screen bg-white flex items-center justify-center">
@@ -282,7 +307,7 @@ function LoginLoadingFallback() {
   )
 }
 
-// ─── Page export dengan Suspense wrapper ─────────────────────
+// ─── Page export ──────────────────────────────────────────────────────────────
 export default function LoginPage() {
   return (
     <ToastProvider>
