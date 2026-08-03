@@ -15,13 +15,18 @@ const PROTECTED_PREFIXES = [
 const AUTH_ONLY_ROUTES = ['/login', '/register']
 
 // Pemetaan prefix route ke role yang diizinkan
-// Catatan: middleware hanya cek role aktif (profile.role)
-// Role check per-dashboard juga dilakukan di layout masing-masing
 const ROLE_REQUIRED: Record<string, string[]> = {
   '/admin': ['admin'],
   '/petani': ['petani', 'admin'],
   '/penyedia': ['penyedia_alat', 'admin'],
   '/pembeli': ['pembeli', 'petani', 'penyedia_alat', 'admin'], // semua bisa akses marketplace
+}
+
+/**
+ * Helper untuk matching path secara presisi (mencegah bypass seperti /admin-fake atau /petani-evil)
+ */
+function isPathMatch(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(prefix + '/')
 }
 
 export async function middleware(request: NextRequest) {
@@ -55,7 +60,8 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   // ─── Redirect user yang sudah login dari halaman auth ────────────
-  if (user && AUTH_ONLY_ROUTES.some(r => pathname.startsWith(r))) {
+  const isAuthOnlyRoute = AUTH_ONLY_ROUTES.some(r => isPathMatch(pathname, r))
+  if (user && isAuthOnlyRoute) {
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('role')
@@ -75,7 +81,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // ─── Protect route yang butuh login ──────────────────────────────
-  const isProtected = PROTECTED_PREFIXES.some(prefix => pathname.startsWith(prefix))
+  const isProtected = PROTECTED_PREFIXES.some(prefix => isPathMatch(pathname, prefix))
   if (isProtected && !user) {
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('redirect', pathname)
@@ -85,7 +91,7 @@ export async function middleware(request: NextRequest) {
   // ─── Role-based access control ───────────────────────────────────
   if (user && isProtected) {
     const matchedPrefix = Object.keys(ROLE_REQUIRED).find(prefix =>
-      pathname.startsWith(prefix)
+      isPathMatch(pathname, prefix)
     )
 
     if (matchedPrefix) {
@@ -104,9 +110,16 @@ export async function middleware(request: NextRequest) {
         ? []
         : (rawRoles ?? (normalizedActiveRole ? [normalizedActiveRole] : []))
 
+      // Multi-role & missing profile fallback:
+      // Jika profile belum ada / profileError untuk user non-admin, berikan default role 'pembeli'
+      const effectiveRoles = userRoles.length > 0
+        ? userRoles
+        : (matchedPrefix !== '/admin' ? ['pembeli'] : [])
+      const effectiveActiveRole = normalizedActiveRole ?? (matchedPrefix !== '/admin' ? 'pembeli' : undefined)
+
       const hasAccess =
-        (normalizedActiveRole && allowedRoles.includes(normalizedActiveRole)) ||
-        userRoles.some(r => allowedRoles.includes(r.trim().toLowerCase()))
+        (effectiveActiveRole && allowedRoles.includes(effectiveActiveRole)) ||
+        effectiveRoles.some(r => allowedRoles.includes(r.trim().toLowerCase()))
 
       if (!hasAccess) {
         return NextResponse.redirect(new URL('/unauthorized', request.url))
@@ -121,4 +134,4 @@ export const config = {
   matcher: [
     '/((?!_next/static|_next/image|favicon.ico|icons|manifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|json)$).*)',
   ],
-}
+}
