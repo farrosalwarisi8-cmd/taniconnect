@@ -5,6 +5,9 @@ import { Badge } from '@/components/ui/Badge'
 import { formatRupiah, formatDateID, getDisplayName, getFirstName } from '@/lib/utils'
 import type { Tables } from '@/lib/supabase/client'
 
+export const dynamic = 'force-dynamic'
+
+
 export default async function PetaniDashboardPage() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
