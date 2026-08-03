@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { formatRupiah, formatDateID } from '@/lib/utils'
+import { formatRupiah, formatDateID, getDisplayName, getEntityLabel } from '@/lib/utils'
 import { AddRecordButton } from './_components/AddRecordButton'
 import { FinancialInsightCard } from './_components/FinancialInsightCard'
 import type { Tables } from '@/lib/supabase/client'
@@ -117,9 +117,9 @@ export default async function KeuanganPage() {
                   {CATEGORY_ICONS[r.category] ?? '📝'}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-fg-dark truncate">{r.item_name}</p>
+                  <p className="font-semibold text-fg-dark truncate">{getDisplayName(r.item_name, 'Catatan keuangan')}</p>
                   <p className="text-caption text-fg/60">
-                    {formatDateID(r.recorded_at)} · {r.quantity} {r.unit}
+                    {formatDateID(r.recorded_at)} · {r.quantity ?? 0} {getEntityLabel(r.unit, 'unit')}
                     {r.transaction_id && ' · Auto dari marketplace'}
                   </p>
                 </div>

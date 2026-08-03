@@ -153,6 +153,10 @@ function ProdukFormInner({ userId, defaultProvince, defaultCity }: Props) {
         imagePaths = await uploadImages()
       }
 
+      if (!userId) {
+        throw new Error('Session tidak valid. Silakan login ulang.')
+      }
+
       const productInsert = {
         seller_id: userId,
         name: data.name.trim(),
@@ -176,7 +180,7 @@ function ProdukFormInner({ userId, defaultProvince, defaultCity }: Props) {
         .from('products')
         .insert(productInsert)
         .select('id')
-        .single()
+        .maybeSingle()
 
       if (insertError) {
         console.error('Insert error:', insertError)

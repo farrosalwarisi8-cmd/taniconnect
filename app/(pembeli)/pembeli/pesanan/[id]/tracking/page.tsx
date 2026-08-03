@@ -4,13 +4,27 @@ import { Badge } from '@/components/ui/Badge'
 export default async function TrackingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createServerSupabaseClient()
-  const { data: tx } = await supabase.from('transactions').select('*, product:products(name)').eq('id', id).single()
+  const { data: tx, error } = await supabase
+    .from('transactions')
+    .select('*, product:products(name)')
+    .eq('id', id)
+    .maybeSingle()
 
+  if (error || !tx) {
+    return (
+      <main className="min-h-screen bg-white p-6">
+        <h1 className="text-h2 mb-6">Lacak Pesanan</h1>
+        <p className="text-fg/70">Pesanan tidak ditemukan.</p>
+      </main>
+    )
+  }
+
+  const status = tx.status ?? 'pending'
   const steps = [
     { label: 'Pesanan Diterima', status: 'pending', done: true },
-    { label: 'Diproses Petani', status: 'processed', done: tx.status !== 'pending' },
-    { label: 'Dalam Pengiriman', status: 'shipped', done: ['shipped', 'delivered', 'completed'].includes(tx.status) },
-    { label: 'Sampai Tujuan', status: 'delivered', done: ['delivered', 'completed'].includes(tx.status) },
+    { label: 'Diproses Petani', status: 'processed', done: status !== 'pending' },
+    { label: 'Dalam Pengiriman', status: 'shipped', done: ['shipped', 'delivered', 'completed'].includes(status) },
+    { label: 'Sampai Tujuan', status: 'delivered', done: ['delivered', 'completed'].includes(status) },
   ]
 
   return (
@@ -33,7 +47,7 @@ export default async function TrackingPage({ params }: { params: Promise<{ id: s
         ))}
       </div>
       
-      {tx.status === 'shipped' && (
+      {status === 'shipped' && (
         <div className="mt-12 p-6 bg-blue-50 border border-blue-100 rounded-sm">
           <p className="font-semibold text-blue-800">Nomor Resi: {tx.tracking_number || 'SEDANG_DIPROSES'}</p>
           <p className="text-sm text-blue-600 mt-1">Kurir: {tx.shipping_provider || 'JNE'}</p>

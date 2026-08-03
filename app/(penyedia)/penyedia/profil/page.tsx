@@ -12,11 +12,15 @@ export default async function ProfilPenyediaPage() {
 
   if (!user) redirect('/login')
 
-  const { data: profileData } = await supabase
+  const { data: profileData, error: profileError } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
+
+  if (profileError) {
+    throw new Error(profileError.message)
+  }
 
   const profile = profileData as Tables<'profiles'> | null
 

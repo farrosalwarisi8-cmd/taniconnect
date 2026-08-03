@@ -12,16 +12,20 @@ export default async function AdminLayout({
 
   if (!user) redirect('/login?redirect=/admin/dashboard')
 
-  const { data: profileData } = await supabase
+  const { data: profileData, error: profileError } = await supabase
     .from('profiles')
     .select('role, roles, full_name')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
+
+  if (profileError) {
+    throw new Error(profileError.message)
+  }
 
   const profile = profileData as {
     role: string | null
     roles: string[] | null
-    full_name: string
+    full_name: string | null
   } | null
 
   if (!profile) {
@@ -40,7 +44,7 @@ export default async function AdminLayout({
 
   return (
     <div className="min-h-screen bg-surface flex flex-col lg:flex-row">
-      <AdminSidebar adminName={profile.full_name} userRoles={userRoles} />
+      <AdminSidebar adminName={profile.full_name ?? 'Administrator'} userRoles={userRoles} />
       <main className="flex-1 lg:ml-64 min-w-0">
         {children}
       </main>

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { ToastProvider, useToast } from '@/components/ui/Toast'
-import { formatDateID } from '@/lib/utils'
+import { formatDateID, getDisplayName, getInitials } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import type { Tables } from '@/lib/supabase/client'
 
@@ -52,7 +52,7 @@ function KYCList({ users }: Props) {
 
         if (error) throw error
 
-        toast(`✓ ${selectedUser.full_name} berhasil diverifikasi!`, 'success')
+        toast(`✓ ${getDisplayName(selectedUser.full_name, 'User')} berhasil diverifikasi!`, 'success')
       } else {
         // Reject — reset kyc_submitted_at supaya user bisa submit ulang
         const { error } = await supabase
@@ -66,7 +66,7 @@ function KYCList({ users }: Props) {
 
         if (error) throw error
 
-        toast(`✗ Verifikasi ${selectedUser.full_name} ditolak. User bisa submit ulang.`, 'info')
+        toast(`✗ Verifikasi ${getDisplayName(selectedUser.full_name, 'User')} ditolak. User bisa submit ulang.`, 'info')
       }
 
       closeModal()
@@ -100,11 +100,11 @@ function KYCList({ users }: Props) {
               {/* Avatar + Info */}
               <div className="flex gap-3 flex-1 min-w-0">
                 <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary to-primary-dark text-white flex items-center justify-center font-bold text-lg shrink-0">
-                  {user.full_name[0]?.toUpperCase()}
+                  {getInitials(user.full_name, 'U')}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <p className="font-bold text-fg-dark">{user.full_name}</p>
+                    <p className="font-bold text-fg-dark">{getDisplayName(user.full_name, 'User')}</p>
                     <Badge variant="warning" size="sm">
                       ⏳ {getTimeAgo(user.kyc_submitted_at)}
                     </Badge>
@@ -181,7 +181,7 @@ function KYCList({ users }: Props) {
         {selectedUser && (
           <div className="space-y-4">
             <div className="p-4 bg-surface rounded-btn">
-              <p className="font-semibold text-fg-dark">{selectedUser.full_name}</p>
+              <p className="font-semibold text-fg-dark">{getDisplayName(selectedUser.full_name, 'User')}</p>
               <p className="text-caption text-fg/60">{selectedUser.phone}</p>
               <p className="text-caption text-fg/60">
                 📍 {selectedUser.city}, {selectedUser.province}

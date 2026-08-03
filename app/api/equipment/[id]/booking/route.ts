@@ -79,7 +79,7 @@ export async function POST(
       .from('equipment')
       .select('id, owner_id, name, price_rent, deposit_amount, is_available, stock')
       .eq('id', equipmentId)
-      .single()
+      .maybeSingle()
 
     const equipment = equipmentData as {
       id: string
@@ -149,7 +149,7 @@ export async function POST(
         status: 'pending',
       })
       .select('id')
-      .single()
+      .maybeSingle()
 
     const inserted = insertedData as { id: string } | null
 
@@ -166,7 +166,7 @@ export async function POST(
       .from('profiles')
       .select('role')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
     const role = (profileData as { role: string } | null)?.role ?? null
 
     await logAudit({

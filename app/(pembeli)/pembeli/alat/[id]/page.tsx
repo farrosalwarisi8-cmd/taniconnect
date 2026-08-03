@@ -1,3 +1,4 @@
+import { notFound } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { Badge } from '@/components/ui/Badge'
 import { formatRupiah } from '@/lib/utils'
@@ -7,13 +8,13 @@ export default async function EquipmentDetailPage({ params }: { params: Promise<
   const { id } = await params
   const supabase = await createServerSupabaseClient()
 
-  const { data: item } = await supabase
+  const { data: item, error } = await supabase
     .from('equipment')
     .select('*, owner:profiles(full_name, is_verified)')
     .eq('id', id)
-    .single()
+    .maybeSingle()
 
-  if (!item) return <div>Alat tidak ditemukan</div>
+  if (error || !item) notFound()
 
   return (
     <main className="min-h-screen bg-white pb-32">

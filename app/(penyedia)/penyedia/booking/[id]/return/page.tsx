@@ -22,7 +22,7 @@ export default async function ReturnBookingPage({ params }: Props) {
   if (!user) redirect(`/login?redirect=/penyedia/booking/${bookingId}/return`)
 
   // Ambil booking + equipment + renter
-  const { data: bookingData } = await supabase
+  const { data: bookingData, error: bookingError } = await supabase
     .from('rental_bookings')
     .select(`
       id, equipment_id, renter_id, start_date, end_date, total_days,
@@ -31,9 +31,9 @@ export default async function ReturnBookingPage({ params }: Props) {
       renter:profiles!rental_bookings_renter_id_fkey ( full_name, phone, city )
     `)
     .eq('id', bookingId)
-    .single()
+    .maybeSingle()
 
-  if (!bookingData) notFound()
+  if (bookingError || !bookingData) notFound()
 
   const booking = bookingData as any
   const eq = Array.isArray(booking.equipment) ? booking.equipment[0] : booking.equipment

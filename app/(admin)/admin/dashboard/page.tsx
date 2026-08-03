@@ -2,7 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import Link from 'next/link'
-import { formatRupiah, formatDateID } from '@/lib/utils'
+import { formatRupiah, formatDateID, getDisplayName, getEntityLabel } from '@/lib/utils'
 import { IndonesiaHeatmap } from '../_components/IndonesiaHeatmap'
 
 export default async function AdminDashboardPage() {
@@ -154,7 +154,7 @@ export default async function AdminDashboardPage() {
                   <div key={r.province}>
                     <div className="flex items-center justify-between text-sm mb-1">
                       <span className="text-fg-dark font-medium">
-                        {i + 1}. 📍 {r.province}
+                        {i + 1}. 📍 {getDisplayName(r.province, 'Wilayah tidak diketahui')}
                       </span>
                       <span className="text-primary-dark font-bold">{r.count} user</span>
                     </div>

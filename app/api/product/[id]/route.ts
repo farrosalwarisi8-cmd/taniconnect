@@ -40,7 +40,7 @@ export async function PATCH(
       .from('products')
       .select('id, seller_id, name, status')
       .eq('id', productId)
-      .single()
+      .maybeSingle()
 
     const existing = existingData as { id: string; seller_id: string; name: string; status: string } | null
 
@@ -79,7 +79,7 @@ export async function PATCH(
       .from('profiles')
       .select('role')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
     const role = (profileData as { role: string } | null)?.role ?? null
 
     // Audit log
@@ -120,7 +120,7 @@ export async function DELETE(
       .from('products')
       .select('id, seller_id, name, image_paths')
       .eq('id', productId)
-      .single()
+      .maybeSingle()
 
     const existing = existingData as { id: string; seller_id: string; name: string; image_paths: string[] } | null
 
@@ -175,7 +175,7 @@ export async function DELETE(
       .from('profiles')
       .select('role')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
     const role = (profileData as { role: string } | null)?.role ?? null
 
     await logAudit({

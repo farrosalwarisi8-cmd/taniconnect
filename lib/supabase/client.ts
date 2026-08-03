@@ -355,7 +355,7 @@ export type TablesInsert<T extends keyof Database['public']['Tables']> =
 export type TablesUpdate<T extends keyof Database['public']['Tables']> =
   Database['public']['Tables'][T]['Update']
 
-export type SupabaseDB = ReturnType<typeof createBrowserClient<Database>>
+export type SupabaseDB = ReturnType<typeof createBrowserClient>
 
 // ─── ENV VALIDATION ──────────────────────────────────────────
 function getRequiredEnv(key: string): string {

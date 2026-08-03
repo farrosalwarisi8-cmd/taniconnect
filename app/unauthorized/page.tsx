@@ -5,21 +5,19 @@
 //
 // Kasus yang ditangani:
 //   A. User login + punya roles  → tampilkan card per role + opsi beranda
-//   B. User login + roles kosong → tampilkan fallback sederhana + opsi beranda
+//   B. User login + roles kosong → tampilkan fallback + link pilih peran
 //   C. User tidak login          → tampilkan fallback dengan tombol login
 import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { ROLE_CONFIG } from '@/lib/role-config'
 import type { UserRole } from '@/lib/supabase/client'
 
-// ─── Type helper — sama dengan pola di admin/layout.tsx ──────────────────────
 interface ProfileData {
-  role: UserRole | null
-  roles: UserRole[] | null
+  role:      UserRole | null
+  roles:     UserRole[] | null
   full_name: string | null
 }
 
-// ─── Server Component ─────────────────────────────────────────────────────────
 export default async function UnauthorizedPage() {
   // ── Fetch user + profile (pola identik dengan admin/layout.tsx) ───────────
   let profile: ProfileData | null = null
@@ -29,14 +27,13 @@ export default async function UnauthorizedPage() {
     const { data: { user } } = await supabase.auth.getUser()
 
     if (user) {
-      const { data: rawProfile } = await supabase
+      const { data: rawProfile, error: profileError } = await supabase
         .from('profiles')
         .select('role, roles, full_name')
         .eq('id', user.id)
-        .single()
+        .maybeSingle()
 
-      // Cast eksplisit — sama dengan pola di admin/layout.tsx
-      profile = rawProfile as ProfileData | null
+      profile = profileError ? null : (rawProfile as ProfileData | null)
     }
   } catch {
     // Kalau fetch gagal (env tidak diset, network error, dsb),
@@ -44,8 +41,7 @@ export default async function UnauthorizedPage() {
     profile = null
   }
 
-  // ── Normalisasi roles ──────────────────────────────────────────────────────
-  // Support user lama yang belum punya kolom roles (fallback ke role tunggal)
+  // Normalisasi roles — support user lama yang belum punya kolom roles
   const userRoles: UserRole[] =
     profile?.roles && profile.roles.length > 0
       ? profile.roles
@@ -53,16 +49,15 @@ export default async function UnauthorizedPage() {
         ? [profile.role]
         : []
 
-  const isLoggedIn = profile !== null
-  const hasRoles = userRoles.length > 0
+  const isLoggedIn  = profile !== null
+  const hasRoles    = userRoles.length > 0
   const displayName = profile?.full_name?.split(' ')[0] ?? null
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-surface-light flex items-center justify-center px-6 py-12">
       <div className="w-full max-w-md">
 
-        {/* ── Header ── */}
+        {/* Header */}
         <div className="text-center mb-8">
           <div className="text-7xl mb-5">🔒</div>
           <h1 className="text-h2 text-fg-dark mb-3">Akses Ditolak</h1>
@@ -73,20 +68,17 @@ export default async function UnauthorizedPage() {
           </p>
         </div>
 
-        {/* ── Kasus A & B: User login ──────────────────────────────────────── */}
+        {/* Kasus A & B: User login */}
         {isLoggedIn && (
           <div className="space-y-3 mb-6">
             {hasRoles ? (
               <>
-                {/* Label section */}
                 <p className="text-sm font-semibold text-fg/50 uppercase tracking-wider text-center mb-4">
                   Buka dashboard yang kamu punya
                 </p>
 
-                {/* Card per role */}
                 {userRoles.map(role => {
                   const config = ROLE_CONFIG[role]
-                  // Skip role yang tidak ada di ROLE_CONFIG (defensive)
                   if (!config) return null
                   return (
                     <Link
@@ -94,20 +86,15 @@ export default async function UnauthorizedPage() {
                       href={config.href}
                       className="flex items-center gap-4 w-full p-4 bg-white rounded-2xl border-2 border-border hover:border-primary hover:shadow-md transition-all group"
                     >
-                      {/* Emoji dalam lingkaran */}
                       <div className="w-12 h-12 rounded-xl bg-green-50 border border-green-100 flex items-center justify-center text-2xl shrink-0 group-hover:bg-green-100 transition-colors">
                         {config.emoji}
                       </div>
-
-                      {/* Label + href */}
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-fg-dark group-hover:text-primary-dark transition-colors">
                           {config.label}
                         </p>
                         <p className="text-xs text-fg/50 truncate">{config.href}</p>
                       </div>
-
-                      {/* Arrow */}
                       <span className="text-fg/30 group-hover:text-primary-dark group-hover:translate-x-0.5 transition-all">
                         →
                       </span>
@@ -132,7 +119,7 @@ export default async function UnauthorizedPage() {
           </div>
         )}
 
-        {/* ── Divider — hanya tampil kalau ada role cards di atas ──────────── */}
+        {/* Divider */}
         {isLoggedIn && hasRoles && (
           <div className="relative mb-6">
             <div className="absolute inset-0 flex items-center">
@@ -144,9 +131,8 @@ export default async function UnauthorizedPage() {
           </div>
         )}
 
-        {/* ── Footer actions ────────────────────────────────────────────────── */}
+        {/* Footer actions */}
         <div className="space-y-3">
-          {/* Kembali ke Beranda — selalu ada */}
           <Link
             href="/"
             className="flex items-center justify-center gap-2 w-full px-6 py-3 min-h-[48px] bg-white border-2 border-border hover:border-primary rounded-2xl text-fg-dark font-medium transition-all hover:shadow-sm"
@@ -154,7 +140,7 @@ export default async function UnauthorizedPage() {
             🏠 Kembali ke Beranda
           </Link>
 
-          {/* Kasus C: tidak login → tampilkan tombol login */}
+          {/* Kasus C: tidak login */}
           {!isLoggedIn && (
             <Link
               href="/login"

@@ -38,20 +38,17 @@ function RegisterFlow() {
 
     setLoading(true)
     try {
-      const phone = normalizePhoneID(state.step1.phone)
-
-      // Pseudo-email: kombinasi random 16-char hex + timestamp untuk keunikan & tidak predictable
-      const randomPart = Array.from(crypto.getRandomValues(new Uint8Array(8)))
-        .map(b => b.toString(16).padStart(2, '0')).join('')
-      const pseudoEmail = `tc.${randomPart}.${Date.now()}@taniconnect.internal`
+      const fullName = state.step1.fullName?.trim() || 'User'
+      const email = state.step1.email.trim().toLowerCase()
+      const phone = state.step1.phone ? normalizePhoneID(state.step1.phone) : ''
 
       // ─── 1. SIGN UP ─────────────────────────────────────────
       const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: pseudoEmail,
+        email,
         password: state.step1.password,
         options: {
           data: {
-            full_name: state.step1.fullName,
+            full_name: fullName,
             phone,
             role: 'pembeli',
           },
@@ -66,13 +63,18 @@ function RegisterFlow() {
       // Init roles array dengan 'pembeli' sebagai default
       await supabase
         .from('profiles')
-        .update({ roles: ['pembeli'] })
-        .eq('id', authData.user.id)
+        .upsert({
+          id: authData.user.id,
+          role: 'pembeli',
+          roles: ['pembeli'],
+          full_name: fullName,
+          phone: phone || null,
+        }, { onConflict: 'id' })
 
       // ─── 2. CEK SESSION — kalau belum ada, LOGIN MANUAL ─────
       if (!authData.session) {
         const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: pseudoEmail,
+          email,
           password: state.step1.password,
         })
 
@@ -91,8 +93,14 @@ function RegisterFlow() {
 
       const { error: profileError } = await supabase
         .from('profiles')
-        .update(profileUpdate)
-        .eq('id', authData.user.id)
+        .upsert({
+          id: authData.user.id,
+          ...profileUpdate,
+          role: 'pembeli',
+          roles: ['pembeli'],
+          full_name: fullName,
+          phone: phone || null,
+        }, { onConflict: 'id' })
 
       if (profileError) {
         // Non-critical: profil masih bisa diupdate nanti

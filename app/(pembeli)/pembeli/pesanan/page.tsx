@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { Badge } from '@/components/ui/Badge'
-import { formatRupiah, formatDateID, TRANSACTION_STATUS_LABELS } from '@/lib/utils'
+import { formatRupiah, formatDateID, TRANSACTION_STATUS_LABELS, getDisplayName, getFirstName } from '@/lib/utils'
 import { ConfirmReceivedButton } from './_components/ConfirmReceivedButton'
 
 type TransactionWithRelations = {
@@ -66,14 +66,20 @@ export default async function PesananPage({ searchParams }: Props) {
     query = (query as any).eq('status', activeStatus)
   }
 
-  const { data } = await query
+  const { data, error } = await query
+
+  if (error) {
+    throw new Error(error.message)
+  }
 
   const list = (data ?? []) as unknown as TransactionWithRelations[]
 
   const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 
-  function getImageUrl(path: string): string {
+  function getImageUrl(path: string | null | undefined): string | null {
+    if (!path) return null
     if (path.startsWith('http')) return path
+    if (!SUPABASE_URL) return null
     return `${SUPABASE_URL}/storage/v1/object/public/product-images/${path}`
   }
 
@@ -170,7 +176,7 @@ export default async function PesananPage({ searchParams }: Props) {
                     {imageUrl ? (
                       <img
                         src={imageUrl}
-                        alt={product?.name ?? 'Produk'}
+                        alt={getDisplayName(product?.name, 'Produk')}
                         className="w-full h-full object-cover"
                         loading="lazy"
                       />
@@ -181,7 +187,7 @@ export default async function PesananPage({ searchParams }: Props) {
 
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-gray-900 text-[14px] line-clamp-1">
-                      {product?.name ?? 'Produk'}
+                      {getDisplayName(product?.name, 'Produk')}
                     </p>
                     <p className="text-[12px] text-gray-500 mt-0.5">
                       {tx.quantity} {product?.unit ?? 'unit'} × {formatRupiah(tx.price_per_unit)}
@@ -191,7 +197,7 @@ export default async function PesananPage({ searchParams }: Props) {
                         href={`/pembeli/penjual/${seller.id}`}
                         className="text-[12px] text-green-600 font-medium hover:underline min-h-0 touch-target-exempt"
                       >
-                        🌿 {seller.full_name}
+                        🌿 {getDisplayName(seller.full_name, 'Penjual')}
                       </Link>
                     )}
                   </div>

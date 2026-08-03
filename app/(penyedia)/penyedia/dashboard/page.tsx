@@ -4,7 +4,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { formatRupiah, formatDateID } from '@/lib/utils'
+import { formatRupiah, formatDateID, getDisplayName, getFirstName } from '@/lib/utils'
 import type { Tables } from '@/lib/supabase/client'
 
 export const metadata = {
@@ -17,11 +17,15 @@ export default async function PenyediaDashboardPage() {
 
   if (!user) redirect('/login')
 
-  const { data: profileData } = await supabase
+  const { data: profileData, error: profileError } = await supabase
     .from('profiles')
     .select('full_name, is_verified, city, province')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
+
+  if (profileError) {
+    throw new Error(profileError.message)
+  }
 
   const profile = profileData as
     | (Pick<Tables<'profiles'>, 'full_name' | 'is_verified' | 'city'> & {
@@ -91,7 +95,7 @@ export default async function PenyediaDashboardPage() {
               letterSpacing: '-0.02em',
             }}
           >
-            {firstName}
+            {getDisplayName(firstName, 'Penyedia')}
           </h1>
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-white/70 text-[13px]">
@@ -228,7 +232,7 @@ export default async function PenyediaDashboardPage() {
               <Card key={item.id} variant="standard" padding="md" hover>
                 <div className="flex items-start justify-between mb-2">
                   <div className="min-w-0 flex-1">
-                    <p className="font-bold text-fg-dark truncate">{item.name}</p>
+                    <p className="font-bold text-fg-dark truncate">{getDisplayName(item.name, 'Alat')}</p>
                     <p className="text-caption text-fg/60">Stok: {item.stock}</p>
                   </div>
                   <Badge

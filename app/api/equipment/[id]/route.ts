@@ -37,7 +37,7 @@ export async function PATCH(
       .from('equipment')
       .select('id, owner_id, name')
       .eq('id', equipmentId)
-      .single()
+      .maybeSingle()
 
     const existing = existingData as { id: string; owner_id: string; name: string } | null
 
@@ -74,7 +74,7 @@ export async function PATCH(
       .from('profiles')
       .select('role')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
     const role = (profileData as { role: string } | null)?.role ?? null
 
     await logAudit({
@@ -113,7 +113,7 @@ export async function DELETE(
       .from('equipment')
       .select('id, owner_id, name, image_paths')
       .eq('id', equipmentId)
-      .single()
+      .maybeSingle()
 
     const existing = existingData as { id: string; owner_id: string; name: string; image_paths: string[] } | null
 
@@ -161,7 +161,7 @@ export async function DELETE(
       .from('profiles')
       .select('role')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
     const role = (profileData as { role: string } | null)?.role ?? null
 
     await logAudit({

@@ -3,7 +3,8 @@ import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { formatRupiah, formatDateID } from '@/lib/utils'
+import { Button } from '@/components/ui/Button'
+import { formatRupiah, formatDateID, getDisplayName, getEntityLabel } from '@/lib/utils'
 import { BookingActions } from './_components/BookingActions'
 import type { Tables } from '@/lib/supabase/client'
 
@@ -163,7 +164,7 @@ export default async function BookingMasukPage() {
                     <div className="flex items-start justify-between gap-2 flex-wrap mb-2">
                       <div>
                         <h3 className="font-bold text-fg-dark text-lg">
-                          🚜 {eq?.name ?? 'Alat tidak ditemukan'}
+                          🚜 {getDisplayName(eq?.name, 'Alat tidak ditemukan')}
                         </h3>
                         <p className="text-caption text-fg/60">
                           Booking #{booking.id.slice(0, 8).toUpperCase()}
@@ -178,10 +179,10 @@ export default async function BookingMasukPage() {
                     <div className="p-3 bg-white rounded-btn border border-border mb-3">
                       <p className="text-caption text-fg/60 mb-1">👤 Penyewa</p>
                       <p className="font-semibold text-fg-dark">
-                        {renter?.full_name ?? 'Anonim'}
+                        {getDisplayName(renter?.full_name, 'Anonim')}
                       </p>
                       <p className="text-caption text-fg/60">
-                        📱 {renter?.phone ?? '-'} · 📍 {renter?.city ?? '-'}
+                        📱 {getEntityLabel(renter?.phone, '-')} · 📍 {getEntityLabel(renter?.city, '-')}
                       </p>
                     </div>
 
@@ -227,6 +228,3 @@ export default async function BookingMasukPage() {
     </div>
   )
 }
-
-// Perlu import Button
-import { Button } from '@/components/ui/Button'

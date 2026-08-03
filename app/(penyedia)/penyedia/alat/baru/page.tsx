@@ -14,11 +14,15 @@ export default async function AlatBaruPage() {
 
   if (!user) redirect('/login?redirect=/penyedia/alat/baru')
 
-  const { data: profileData } = await supabase
+  const { data: profileData, error: profileError } = await supabase
     .from('profiles')
     .select('full_name, province, city, is_verified')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
+
+  if (profileError) {
+    throw new Error(profileError.message)
+  }
 
   const profile = profileData as Pick<
     Tables<'profiles'>,

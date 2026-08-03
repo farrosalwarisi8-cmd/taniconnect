@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { Badge } from '@/components/ui/Badge'
-import { formatRupiah, formatDateID } from '@/lib/utils'
+import { formatRupiah, formatDateID, getDisplayName, getFirstName } from '@/lib/utils'
 import type { Tables } from '@/lib/supabase/client'
 
 export default async function PetaniDashboardPage() {
@@ -11,11 +11,15 @@ export default async function PetaniDashboardPage() {
 
   if (!user) redirect('/login')
 
-  const { data: profileData } = await supabase
+  const { data: profileData, error: profileError } = await supabase
     .from('profiles')
     .select('full_name, is_verified, city, province')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
+
+  if (profileError) {
+    throw new Error(profileError.message)
+  }
 
   const profile = profileData as
     | (Pick<Tables<'profiles'>, 'full_name' | 'is_verified' | 'city'> & {
@@ -56,7 +60,8 @@ export default async function PetaniDashboardPage() {
     return 'Selamat malam'
   })()
 
-  const firstName = profile?.full_name?.split(' ')[0] ?? 'Petani'
+  const rawName = profile?.full_name?.trim() ?? ''
+  const firstName = getFirstName(rawName, 'Petani')
 
   const QUICK_LINKS = [
     {
@@ -144,7 +149,7 @@ export default async function PetaniDashboardPage() {
                   letterSpacing: '-0.02em',
                 }}
               >
-                {firstName}
+                {getDisplayName(firstName, 'Petani')}
               </h1>
               <p className="text-white/60 text-[12px] mt-1">
                 {formatDateID(new Date(), 'full')}
@@ -167,7 +172,7 @@ export default async function PetaniDashboardPage() {
                 aria-label="Profil saya"
                 title="Lihat profil"
               >
-                {firstName[0]?.toUpperCase() ?? 'P'}
+                {getDisplayName(firstName, 'P')[0]?.toUpperCase() ?? 'P'}
               </Link>
             </div>
           </div>

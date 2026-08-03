@@ -10,19 +10,17 @@ import { Input } from '@/components/ui/Input'
 import { ToastProvider, useToast } from '@/components/ui/Toast'
 import { createClient } from '@/lib/supabase/client'
 import { loginSchema, type LoginInput } from '@/lib/validations'
-import { normalizePhoneID } from '@/lib/utils'
 import type { UserRole } from '@/lib/supabase/client'
 import { ROLE_CONFIG } from '@/lib/role-config'
+import { normalizeUserRole } from '@/lib/utils'
 
-// ─── Type helpers ─────────────────────────────────────────────────────────────
 interface ProfileRoleData {
-  role: UserRole | null
+  role:  UserRole | null
   roles: UserRole[] | null
 }
 
-// ─── Role Selector Modal ──────────────────────────────────────────────────────
 interface RoleSelectorModalProps {
-  roles: UserRole[]
+  roles:    UserRole[]
   onSelect: (role: UserRole) => void
 }
 
@@ -66,10 +64,7 @@ function RoleSelectorModal({ roles, onSelect }: RoleSelectorModalProps) {
   )
 }
 
-// ─── Helper: update profile role tanpa TypeScript never error ────────────────
-// Root cause: @supabase/ssr tidak selalu bisa resolve Update<'profiles'> type
-// dari Database generic — menghasilkan `never` untuk argumen .update().
-// Fix: cast .from() result ke `any` secara terlokalisir.
+// Helper: update profile role tanpa TypeScript never error
 async function updateProfileRole(
   supabase: ReturnType<typeof createClient>,
   userId: string,
@@ -77,21 +72,19 @@ async function updateProfileRole(
 ): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase.from('profiles') as any)
-    .update({ role: newRole })
-    .eq('id', userId)
+    .upsert({ id: userId, role: newRole }, { onConflict: 'id' })
 }
 
-// ─── Login Form ───────────────────────────────────────────────────────────────
 function LoginForm() {
-  const router = useRouter()
+  const router       = useRouter()
   const searchParams = useSearchParams()
-  const { toast } = useToast()
-  const supabase = createClient()
+  const { toast }    = useToast()
+  const supabase     = createClient()
 
-  const [loading, setLoading] = useState(false)
+  const [loading,          setLoading]          = useState(false)
   const [showRoleSelector, setShowRoleSelector] = useState(false)
-  const [availableRoles, setAvailableRoles] = useState<UserRole[]>([])
-  const [activeRole, setActiveRole] = useState<UserRole | null>(null)
+  const [availableRoles,   setAvailableRoles]   = useState<UserRole[]>([])
+  const [activeRole,       setActiveRole]       = useState<UserRole | null>(null)
 
   const redirectTo = searchParams.get('redirect') ?? null
 
@@ -103,7 +96,6 @@ function LoginForm() {
     resolver: zodResolver(loginSchema),
   })
 
-  // ── handleRoleSelect ────────────────────────────────────────────────────────
   const handleRoleSelect = async (selectedRole: UserRole) => {
     setShowRoleSelector(false)
 
@@ -117,69 +109,53 @@ function LoginForm() {
     window.location.href = destination
   }
 
-  // ── onSubmit ────────────────────────────────────────────────────────────────
   const onSubmit = async (data: LoginInput) => {
     setLoading(true)
     try {
-      const phone = normalizePhoneID(data.phone)
-
-      // ─── 1. Resolve email via server-side API ─────────────────────────────
-      let resolvedEmail: string | null = null
-
-      try {
-        const resolveRes = await fetch('/api/auth/resolve-phone', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone }),
-        })
-
-        if (resolveRes.ok) {
-          const resolveData: unknown = await resolveRes.json()
-          if (
-            resolveData !== null &&
-            typeof resolveData === 'object' &&
-            'email' in resolveData
-          ) {
-            const emailVal = (resolveData as { email: unknown }).email
-            resolvedEmail = typeof emailVal === 'string' ? emailVal : null
-          }
-        }
-      } catch {
-        resolvedEmail = null
-      }
-
-      if (!resolvedEmail) {
-        toast('Nomor HP atau password salah', 'error')
-        return
-      }
-
-      // ─── 2. Login dengan email + password ────────────────────────────────
       const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: resolvedEmail,
+        email:    data.email,
         password: data.password,
       })
 
       if (signInError || !authData.user || !authData.session) {
-        toast('Nomor HP atau password salah', 'error')
+        toast('Email atau password salah', 'error')
+        return
+      }
+
+      if (!authData.user.email_confirmed_at) {
+        toast(
+          'Email belum dikonfirmasi. Cek inbox & spam emailmu, lalu klik link konfirmasi.',
+          'error',
+          6000
+        )
         return
       }
 
       toast('Berhasil masuk! Mengalihkan...', 'success', 2000)
 
-      // ─── 3. Fetch profile untuk data roles (post-auth) ───────────────────
-      const { data: rawProfile } = await supabase
+      const { data: rawProfile, error: profileError } = await supabase
         .from('profiles')
         .select('role, roles')
         .eq('id', authData.user.id)
-        .single()
+        .maybeSingle()
 
-      const profileData = rawProfile as ProfileRoleData | null
+      if (profileError) {
+        console.warn('[LOGIN PROFILE ERROR]', profileError.message)
+      }
+
+      const profileData = (rawProfile ?? null) as ProfileRoleData | null
+      const rolesFromProfile = Array.isArray(profileData?.roles) ? profileData.roles : []
+
+      const normalizedRole = normalizeUserRole(profileData?.role) as UserRole | null
+      const normalizedRoles = rolesFromProfile
+        .map(role => normalizeUserRole(role) as UserRole | null)
+        .filter((role): role is UserRole => Boolean(role))
 
       const userRoles: UserRole[] =
-        profileData?.roles && profileData.roles.length > 0
-          ? profileData.roles
-          : profileData?.role
-            ? [profileData.role]
+        normalizedRoles.length > 0
+          ? normalizedRoles
+          : normalizedRole
+            ? [normalizedRole]
             : ['pembeli']
 
       if (redirectTo) {
@@ -189,7 +165,7 @@ function LoginForm() {
 
       if (userRoles.length > 1) {
         setAvailableRoles(userRoles)
-        setActiveRole(profileData?.role ?? null)
+        setActiveRole(normalizedRole ?? null)
         setLoading(false)
         setTimeout(() => setShowRoleSelector(true), 800)
         return
@@ -206,7 +182,6 @@ function LoginForm() {
     }
   }
 
-  // ── JSX ───────────────────────────────────────────────────────────────────
   return (
     <>
       {showRoleSelector && (
@@ -238,27 +213,29 @@ function LoginForm() {
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
               <Input
-                label="Nomor HP"
-                leftAddon="+62"
-                placeholder="8123456789"
-                type="tel"
-                inputMode="tel"
-                {...register('phone')}
-                error={errors.phone?.message}
-                autoComplete="tel"
+                label="Email"
+                type="email"
+                inputMode="email"
+                placeholder="contoh@email.com"
+                autoComplete="email"
+                {...register('email')}
+                error={errors.email?.message}
               />
 
               <Input
                 label="Password"
                 type="password"
                 placeholder="Password kamu"
+                autoComplete="current-password"
                 {...register('password')}
                 error={errors.password?.message}
-                autoComplete="current-password"
               />
 
               <div className="flex justify-end">
-                <Link href="#" className="text-btn-sm text-primary-dark hover:underline min-h-0">
+                <Link
+                  href="/forgot-password"
+                  className="text-btn-sm text-primary-dark hover:underline min-h-0"
+                >
                   Lupa password?
                 </Link>
               </div>
@@ -295,7 +272,6 @@ function LoginForm() {
   )
 }
 
-// ─── Loading Fallback ─────────────────────────────────────────────────────────
 function LoginLoadingFallback() {
   return (
     <main className="min-h-screen bg-white flex items-center justify-center">
@@ -307,7 +283,6 @@ function LoginLoadingFallback() {
   )
 }
 
-// ─── Page export ──────────────────────────────────────────────────────────────
 export default function LoginPage() {
   return (
     <ToastProvider>

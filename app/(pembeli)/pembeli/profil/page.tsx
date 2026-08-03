@@ -13,13 +13,19 @@ export default async function PembeliProfilPage() {
 
   if (!user) redirect('/login')
 
-  const { data: profileData } = await supabase
+  const { data: profileData, error: profileError } = await supabase
     .from('profiles')
     .select('full_name, phone, email, city, province, address, bio, is_verified, avatar_storage_path, rating_avg, rating_count, created_at')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
 
-  if (!profileData) redirect('/login')
+  if (profileError) {
+    throw new Error(profileError.message)
+  }
+
+  if (!profileData) {
+    redirect('/login')
+  }
 
   const [
     { count: totalOrders },

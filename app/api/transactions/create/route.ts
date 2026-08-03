@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
       .from('products')
       .select('id, name, price_per_unit, unit, stock_quantity, seller_id, status')
       .eq('id', parsed.data.product_id)
-      .single()
+      .maybeSingle()
 
     const product = productData as Pick<Tables<'products'>,
       'id' | 'name' | 'price_per_unit' | 'unit' | 'stock_quantity' | 'seller_id' | 'status'
@@ -114,6 +114,17 @@ export async function POST(req: NextRequest) {
     const subtotal = product.price_per_unit * parsed.data.quantity
     const totalAmount = subtotal + parsed.data.shipping_cost
 
+    const hasMidtransConfig = Boolean(
+      process.env.MIDTRANS_SERVER_KEY && process.env.MIDTRANS_CLIENT_KEY
+    )
+
+    if (!hasMidtransConfig) {
+      return NextResponse.json(
+        { error: 'Pembayaran belum tersedia karena konfigurasi Midtrans belum lengkap.' },
+        { status: 503 }
+      )
+    }
+
     // ─── 7. INSERT TRANSACTION ────────────────────────────────
     const txInsert: TablesInsert<'transactions'> = {
       buyer_id:         user.id,
@@ -134,7 +145,7 @@ export async function POST(req: NextRequest) {
       .from('transactions')
       .insert(txInsert)
       .select()
-      .single()
+      .maybeSingle()
 
     const transaction = txData as Tables<'transactions'> | null
 
@@ -157,7 +168,7 @@ export async function POST(req: NextRequest) {
       item_details: [
         {
           id:       product.id,
-          name:     product.name.slice(0, 50),
+          name:     (product.name ?? 'Produk').slice(0, 50),
           price:    product.price_per_unit,
           quantity: parsed.data.quantity,
         },
@@ -169,16 +180,23 @@ export async function POST(req: NextRequest) {
         }] : []),
       ],
       customer_details: {
-        first_name: user.user_metadata?.full_name ?? 'Pembeli',
-        email:      user.email,
-        phone:      user.user_metadata?.phone,
+        first_name: (user.user_metadata?.full_name as string | undefined)?.trim() || 'Pembeli',
+        email:      user.email ?? 'pembeli@taniconnect.id',
+        phone:      (user.user_metadata?.phone as string | undefined)?.trim() || null,
       },
       callbacks: {
-        finish: `${process.env.NEXT_PUBLIC_APP_URL}/pembeli/pesanan`,
+        finish: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/pembeli/pesanan`,
       },
     }
 
-    const snapResponse = await midtransSnap.createTransaction(snapPayload)
+    let snapToken = ''
+
+    try {
+      const snapResponse = await midtransSnap.createTransaction(snapPayload)
+      snapToken = snapResponse?.token ?? ''
+    } catch (midtransError: any) {
+      console.error('[MIDTRANS CREATE ERROR]', midtransError)
+    }
 
     // ─── 9. INSERT PAYMENT ────────────────────────────────────
     const paymentInsert: TablesInsert<'payments'> = {
@@ -186,13 +204,22 @@ export async function POST(req: NextRequest) {
       midtrans_order_id: orderId,
       amount:            totalAmount,
       status:            'pending',
-      snap_token:        snapResponse.token,
+      snap_token:        snapToken,
     }
 
     const { error: paymentError } = await admin.from('payments').insert(paymentInsert)
 
     if (paymentError) {
       console.error('[PAYMENT INSERT ERROR]', paymentError)
+    }
+
+    if (!snapToken) {
+      return NextResponse.json({
+        transaction_id: transaction.id,
+        snap_token: null,
+        order_id: orderId,
+        message: 'Transaksi dibuat, tetapi pembayaran belum tersedia saat ini.',
+      })
     }
 
     // ─── 10. AUDIT LOG ────────────────────────────────────────
@@ -211,7 +238,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       transaction_id: transaction.id,
-      snap_token:     snapResponse.token,
+      snap_token:     snapToken,
       order_id:       orderId,
     })
   } catch (err: any) {

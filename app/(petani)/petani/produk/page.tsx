@@ -4,7 +4,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { formatRupiah, formatDateID } from '@/lib/utils'
+import { formatRupiah, formatDateID, getDisplayName, getEntityLabel } from '@/lib/utils'
 import { ProdukSayaActions } from './_components/ProdukSayaActions'
 import type { Tables } from '@/lib/supabase/client'
 
@@ -195,7 +195,7 @@ export default async function ProdukSayaPage() {
                       {imageUrl ? (
                         <img
                           src={imageUrl}
-                          alt={product.name}
+                          alt={getDisplayName(product.name, 'Produk')}
                           className="w-full h-full object-cover"
                         />
                       ) : (
@@ -210,12 +210,12 @@ export default async function ProdukSayaPage() {
                       <div className="flex items-start justify-between gap-2 flex-wrap mb-2">
                         <div className="min-w-0">
                           <h3 className="font-bold text-fg-dark text-lg leading-tight">
-                            {product.name}
+                            {getDisplayName(product.name, 'Produk tanpa nama')}
                           </h3>
                           <p className="text-caption text-fg/60 mt-1">
                             {CATEGORY_LABELS[product.category] ?? product.category}
                             {' · '}
-                            📍 {product.city ?? '-'}
+                            📍 {getEntityLabel(product.city, '-')}
                           </p>
                         </div>
                         <div className="flex gap-1 flex-wrap">
@@ -259,7 +259,7 @@ export default async function ProdukSayaPage() {
                       {/* Actions */}
                       <ProdukSayaActions
                         productId={product.id}
-                        productName={product.name}
+                        productName={getDisplayName(product.name, 'Produk')}
                         currentStatus={product.status ?? 'active'}
                       />
                     </div>

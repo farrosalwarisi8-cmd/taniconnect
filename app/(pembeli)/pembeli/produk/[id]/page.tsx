@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { CheckoutClient } from './_components/CheckoutClient'
 import { Badge } from '@/components/ui/Badge'
-import { formatRupiah, CATEGORY_LABELS } from '@/lib/utils'
+import { formatRupiah, CATEGORY_LABELS, getDisplayName, getInitials, getFirstName } from '@/lib/utils'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -54,7 +54,7 @@ export default async function ProductDetailPage({ params }: Props) {
     `)
     .eq('id', id)
     .eq('status', 'active')
-    .single()
+    .maybeSingle()
 
   const product = data as ProductWithSeller | null
   if (error || !product) notFound()
@@ -100,7 +100,7 @@ export default async function ProductDetailPage({ params }: Props) {
 
       <div className="relative aspect-square sm:aspect-video bg-surface-light">
         {images[0] ? (
-          <img src={images[0]} alt={product.name} className="w-full h-full object-cover" />
+          <img src={images[0]} alt={getDisplayName(product.name, 'Produk')} className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-8xl">🌾</div>
         )}
@@ -125,7 +125,7 @@ export default async function ProductDetailPage({ params }: Props) {
             )}
           </div>
           <h1 className="text-[28px] sm:text-[36px] font-bold text-fg-dark leading-tight mb-3">
-            {product.name}
+            {getDisplayName(product.name, 'Produk')}
           </h1>
           <div className="flex items-baseline gap-2">
             <span className="text-[36px] sm:text-[44px] font-extrabold text-primary-dark leading-none" style={{ fontFamily: "'Bricolage Grotesque', ui-sans-serif" }}>
@@ -147,12 +147,12 @@ export default async function ProductDetailPage({ params }: Props) {
             <div className="p-4 flex items-center gap-4">
               {/* Avatar */}
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-green-100 to-green-200 text-green-800 flex items-center justify-center font-bold text-xl shrink-0 shadow-sm">
-                {seller.full_name?.split(' ').map((w: string) => w[0]).slice(0,2).join('').toUpperCase() ?? 'P'}
+                {getInitials(seller.full_name, 'P')}
               </div>
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-bold text-gray-900 text-[15px] truncate">{seller.full_name}</p>
+                  <p className="font-bold text-gray-900 text-[15px] truncate">{getDisplayName(seller.full_name, 'Penjual')}</p>
                   {seller.is_verified && (
                     <span className="bg-green-100 text-green-700 text-[11px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
                       ✓ Terverifikasi

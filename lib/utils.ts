@@ -59,6 +59,54 @@ export function truncate(text: string, maxLength: number): string {
 }
 
 /**
+ * Ambil nama tampilan aman dari kolom profil.
+ */
+export function getDisplayName(value?: string | null, fallback = 'User'): string {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : fallback
+}
+
+/**
+ * Ambil inisial dari nama pengguna dengan fallback aman.
+ */
+export function getInitials(value?: string | null, fallback = 'A'): string {
+  const trimmed = value?.trim()
+  if (!trimmed) return fallback
+
+  const parts = trimmed.split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return fallback
+
+  return parts.slice(0, 2).map(part => part[0]?.toUpperCase() ?? '').join('')
+}
+
+/**
+ * Ambil nama depan aman dari profil.
+ */
+export function getFirstName(value?: string | null, fallback = 'User'): string {
+  const trimmed = value?.trim()
+  if (!trimmed) return fallback
+
+  return trimmed.split(/\s+/).filter(Boolean)[0] ?? fallback
+}
+
+/**
+ * Ambil label aman untuk item yang belum punya nama.
+ */
+export function getEntityLabel(value?: string | null, fallback = 'Item'): string {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : fallback
+}
+
+/**
+ * Normalisasi role pengguna dengan fallback aman.
+ */
+export function normalizeUserRole(value?: string | null): string | null {
+  if (!value) return null
+  const normalized = value.trim().toLowerCase()
+  return normalized === 'penyedia' ? 'penyedia_alat' : normalized
+}
+
+/**
  * Sleep helper (untuk debounce, dev testing)
  */
 export const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))

@@ -71,7 +71,7 @@ export default function SplashPage() {
 
       {/* Footer note */}
       <p className="absolute bottom-8 text-caption" style={{ color: 'rgba(255,255,255,0.5)' }}>
-        © 2026 TaniConnect · UU PDP Compliant
+        © 2026 TaniConnect · Platform pertanian Indonesia
       </p>
     </main>
   )

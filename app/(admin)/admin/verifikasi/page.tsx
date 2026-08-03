@@ -1,7 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { formatDateID } from '@/lib/utils'
+import { formatDateID, getDisplayName, getInitials } from '@/lib/utils'
 import { KYCVerificationList } from './_components/KYCVerificationList'
 import type { Tables } from '@/lib/supabase/client'
 
@@ -111,11 +111,11 @@ export default async function VerifikasiKYCPage() {
                 className="flex items-center gap-3 p-3 bg-success/5 rounded-btn"
               >
                 <div className="w-10 h-10 rounded-full bg-success/20 text-success flex items-center justify-center font-bold shrink-0">
-                  {user.full_name[0]?.toUpperCase()}
+                  {getInitials(user.full_name, 'U')}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-fg-dark truncate">
-                    {user.full_name}
+                    {getDisplayName(user.full_name, 'User')}
                   </p>
                   <p className="text-caption text-fg/60">
                     📍 {user.city ?? '-'}, {user.province ?? '-'} · {user.role}

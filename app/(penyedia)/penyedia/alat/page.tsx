@@ -4,7 +4,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { formatRupiah, formatDateID } from '@/lib/utils'
+import { formatRupiah, formatDateID, getDisplayName, getEntityLabel } from '@/lib/utils'
 import { AlatSayaActions } from './_components/AlatSayaActions'
 import type { Tables } from '@/lib/supabase/client'
 
@@ -181,7 +181,7 @@ export default async function AlatSayaPage() {
                     {imageUrl ? (
                       <img
                         src={imageUrl}
-                        alt={item.name}
+                        alt={getDisplayName(item.name, 'Alat')}
                         className="w-full h-full object-cover"
                       />
                     ) : (
@@ -196,12 +196,12 @@ export default async function AlatSayaPage() {
                     <div className="flex items-start justify-between gap-2 flex-wrap mb-2">
                       <div className="min-w-0">
                         <h3 className="font-bold text-fg-dark text-lg leading-tight">
-                          {item.name}
+                          {getDisplayName(item.name, 'Alat')}
                         </h3>
                         <p className="text-caption text-fg/60 mt-1">
                           {CATEGORY_LABELS[item.category] ?? item.category}
                           {' · '}
-                          📍 {item.city ?? '-'}
+                          📍 {getEntityLabel(item.city, '-')}
                         </p>
                       </div>
                       <div className="flex gap-1 flex-wrap">

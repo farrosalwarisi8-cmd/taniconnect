@@ -38,8 +38,9 @@ export function PembeliProfileClient({ profile: initialProfile, stats, recentOrd
   const [profile, setProfile] = useState(initialProfile)
   const [showEdit, setShowEdit] = useState(false)
 
-  const initials = profile.full_name
-    ? profile.full_name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()
+  const displayName = profile.full_name?.trim() || 'Pembeli'
+  const initials = displayName
+    ? displayName.split(/\s+/).filter(Boolean).map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()
     : 'P'
 
   const memberSince = profile.created_at
@@ -69,7 +70,7 @@ export function PembeliProfileClient({ profile: initialProfile, stats, recentOrd
 
               <div className="flex-1 min-w-0">
                 <h1 className="text-white font-bold text-2xl sm:text-3xl leading-tight">
-                  {profile.full_name}
+                  {displayName}
                 </h1>
                 <p className="text-white/70 text-[13px] mt-1">🛒 Pembeli · TaniConnect</p>
                 {(profile.city || profile.province) && (

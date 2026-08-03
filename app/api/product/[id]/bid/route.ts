@@ -13,11 +13,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const admin = createAdminSupabaseClient()
 
   // 1. Cek produk & waktu lelang
-  const { data: product } = await admin
+  const { data: product, error: productError } = await admin
     .from('products')
     .select('is_auction, auction_end_time, current_bid, price_per_unit, min_bid_increment')
     .eq('id', productId)
-    .single()
+    .maybeSingle()
+
+  if (productError || !product) {
+    return NextResponse.json({ error: 'Produk tidak ditemukan' }, { status: 404 })
+  }
 
   if (!product?.is_auction) return NextResponse.json({ error: 'Bukan produk lelang' }, { status: 400 })
   if (new Date(product.auction_end_time!) < new Date()) return NextResponse.json({ error: 'Lelang sudah berakhir' }, { status: 400 })

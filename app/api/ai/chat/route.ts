@@ -47,22 +47,35 @@ export async function POST(req: NextRequest) {
     }
 
     // ─── 4. CALL GROQ LLM ─────────────────────────────────────
-    const completion = await groq.chat.completions.create({
-      model: GROQ_MODEL,
-      messages: [
-        { role: 'system', content: AGRI_SYSTEM_PROMPT },
-        ...parsed.data.messages,
-      ],
-      temperature: 0.7,
-      max_tokens: 800,
-    })
+    if (!process.env.GROQ_API_KEY || process.env.GROQ_API_KEY.includes('dummy')) {
+      return NextResponse.json({
+        reply: 'Fitur Tanya AI sedang dalam mode fallback karena API key Groq belum siap. Coba lagi nanti atau gunakan fitur lain seperti prediksi harga.',
+      })
+    }
 
-    const reply = completion.choices[0]?.message?.content ?? 'Maaf, saya tidak bisa menjawab saat ini.'
+    try {
+      const completion = await groq.chat.completions.create({
+        model: GROQ_MODEL,
+        messages: [
+          { role: 'system', content: AGRI_SYSTEM_PROMPT },
+          ...parsed.data.messages,
+        ],
+        temperature: 0.7,
+        max_tokens: 800,
+      })
 
-    return NextResponse.json({
-      reply,
-      usage: completion.usage,
-    })
+      const reply = completion.choices[0]?.message?.content?.trim() || 'Maaf, saya tidak bisa menjawab saat ini.'
+
+      return NextResponse.json({
+        reply,
+        usage: completion.usage ?? null,
+      })
+    } catch (groqError: any) {
+      console.error('[GROQ CHAT ERROR]', groqError)
+      return NextResponse.json({
+        reply: 'Maaf, layanan AI sedang tidak tersedia saat ini. Silakan coba beberapa saat lagi.',
+      })
+    }
   } catch (err: any) {
     console.error('[AI CHAT ERROR]', err)
     return NextResponse.json(

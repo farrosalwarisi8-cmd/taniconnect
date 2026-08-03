@@ -41,6 +41,17 @@ export function RegisterStep1({ defaultValues, onComplete }: RegisterStep1Props)
       />
 
       <Input
+        label="Email"
+        type="email"
+        inputMode="email"
+        placeholder="contoh@email.com"
+        autoComplete="email"
+        {...register('email')}
+        error={errors.email?.message}
+        required
+      />
+
+      <Input
         label="Nomor HP"
         leftAddon="+62"
         placeholder="8123456789"

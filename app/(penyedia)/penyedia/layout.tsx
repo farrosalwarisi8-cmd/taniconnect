@@ -12,11 +12,11 @@ export default async function PenyediaLayout({
 
   if (!user) redirect('/login?redirect=/penyedia/dashboard')
 
-  const { data: profileData } = await supabase
+  const { data: profileData, error: profileError } = await supabase
     .from('profiles')
     .select('role, roles, full_name')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
 
   const profile = profileData as {
     role: string | null
@@ -24,7 +24,7 @@ export default async function PenyediaLayout({
     full_name: string
   } | null
 
-  if (!profile) {
+  if (profileError || !profile) {
     redirect('/unauthorized')
   }
 

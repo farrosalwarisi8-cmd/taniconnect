@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { ToastProvider, useToast } from '@/components/ui/Toast'
-import { formatRupiah, generateIdempotencyKey } from '@/lib/utils'
+import { formatRupiah, generateIdempotencyKey, getDisplayName } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 
 // Type deklarasi untuk Midtrans Snap yang di-inject via <script>
@@ -47,6 +47,7 @@ function CheckoutFlow(props: Props) {
   const [quantity, setQuantity] = useState(1)
   const [shipping, setShipping] = useState<ShippingMethod>('jne')
   const [loading, setLoading] = useState(false)
+  const [snapReady, setSnapReady] = useState(false)
   const [user, setUser] = useState<{ id: string } | null>(null)
 
   useEffect(() => {
@@ -59,6 +60,10 @@ function CheckoutFlow(props: Props) {
 
     // Load Midtrans Snap script
     const scriptId = 'midtrans-snap-script'
+    if (typeof window !== 'undefined' && window.snap) {
+      setSnapReady(true)
+    }
+
     if (!document.getElementById(scriptId)) {
       const script = document.createElement('script')
       script.id = scriptId
@@ -66,9 +71,14 @@ function CheckoutFlow(props: Props) {
         ? 'https://app.midtrans.com/snap/snap.js'
         : 'https://app.sandbox.midtrans.com/snap/snap.js'
       script.setAttribute('data-client-key', process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY ?? '')
+      script.onload = () => setSnapReady(Boolean(window.snap))
+      script.onerror = () => {
+        setSnapReady(false)
+        toast('Sistem pembayaran tidak bisa dimuat saat ini', 'warning')
+      }
       document.body.appendChild(script)
     }
-  }, [supabase])
+  }, [supabase, toast])
 
   const shippingCost = SHIPPING_OPTIONS.find(o => o.value === shipping)?.cost ?? 0
   const subtotal = props.pricePerUnit * quantity
@@ -86,6 +96,11 @@ function CheckoutFlow(props: Props) {
       return
     }
 
+    if (!snapReady || typeof window.snap === 'undefined') {
+      toast('Sistem pembayaran belum siap, silakan coba lagi sebentar', 'warning')
+      return
+    }
+
     setLoading(true)
     try {
       const idempotencyKey = generateIdempotencyKey()
@@ -93,8 +108,8 @@ function CheckoutFlow(props: Props) {
       const res = await fetch('/api/transactions/create', {
         method: 'POST',
         headers: {
-          'Content-Type':     'application/json',
-          'X-Idempotency-Key': idempotencyKey,
+          'Content-Type': 'application/json',
+          'x-idempotency-key': idempotencyKey,
         },
         body: JSON.stringify({
           product_id:      props.productId,
@@ -105,11 +120,14 @@ function CheckoutFlow(props: Props) {
       })
 
       if (!res.ok) {
-        const err = await res.json()
+        const err = await res.json().catch(() => ({}))
         throw new Error(err.error ?? 'Gagal membuat transaksi')
       }
 
-      const { snap_token } = await res.json()
+      const { snap_token } = await res.json().catch(() => ({ snap_token: null }))
+      if (!snap_token) {
+        throw new Error('Token pembayaran tidak tersedia')
+      }
 
       // Buka Midtrans Snap popup
       window.snap.pay(snap_token, {

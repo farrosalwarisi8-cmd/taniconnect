@@ -1,7 +1,6 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
-import type { Database } from './client'
 
 function requireEnv(key: string): string {
   const value = process.env[key]
@@ -23,7 +22,7 @@ export async function createServerSupabaseClient() {
   const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL')
   const supabaseAnonKey = requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
 
-  return createServerClient<Database>(
+  return createServerClient<any>(
     supabaseUrl,
     supabaseAnonKey,
     {
@@ -59,7 +58,7 @@ export function createAdminSupabaseClient() {
   const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL')
   const serviceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY')
 
-  return createSupabaseClient<Database>(
+  return createSupabaseClient<any>(
     supabaseUrl,
     serviceRoleKey,
     {

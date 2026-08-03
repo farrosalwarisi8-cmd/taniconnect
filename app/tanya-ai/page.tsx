@@ -53,14 +53,24 @@ function ChatbotFlow() {
       })
 
       if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error || 'Gagal mendapat jawaban')
+        let message = 'Gagal mendapat jawaban'
+        try {
+          const err = await res.json()
+          message = err.error || message
+        } catch {
+          // ignore
+        }
+        throw new Error(message)
       }
 
       const data = await res.json()
+      const reply = typeof data?.reply === 'string' && data.reply.trim()
+        ? data.reply.trim()
+        : 'Maaf, saya belum bisa memberikan jawaban saat ini.'
+
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: data.reply,
+        content: reply,
         time: getTime(),
       }])
     } catch (err: any) {

@@ -8,6 +8,7 @@ const PROTECTED_PREFIXES = [
   '/penyedia',
   '/admin',
   '/pilih-peran',
+  '/settings',
 ]
 
 // Route yang hanya bisa diakses ketika BELUM login
@@ -55,21 +56,21 @@ export async function middleware(request: NextRequest) {
 
   // ─── Redirect user yang sudah login dari halaman auth ────────────
   if (user && AUTH_ONLY_ROUTES.some(r => pathname.startsWith(r))) {
-    // Ambil role dari profile untuk redirect yang tepat
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
 
-    const role = (profile as any)?.role ?? 'pembeli'
+    const role = profileError ? 'pembeli' : ((profile as any)?.role ?? 'pembeli')
+    const normalizedRole = typeof role === 'string' ? role.toLowerCase() : 'pembeli'
     const roleRedirects: Record<string, string> = {
       petani: '/petani/dashboard',
       pembeli: '/pembeli/marketplace',
       penyedia_alat: '/penyedia/dashboard',
       admin: '/admin/dashboard',
     }
-    const destination = roleRedirects[role] ?? '/pembeli/marketplace'
+    const destination = roleRedirects[normalizedRole] ?? '/pembeli/marketplace'
     return NextResponse.redirect(new URL(destination, request.url))
   }
 
@@ -90,20 +91,22 @@ export async function middleware(request: NextRequest) {
     if (matchedPrefix) {
       const allowedRoles = ROLE_REQUIRED[matchedPrefix]
 
-      // Ambil role aktif dari profiles (bukan dari JWT metadata karena bisa stale)
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role, roles')
         .eq('id', user.id)
-        .single()
+        .maybeSingle()
 
-      const activeRole = (profile as any)?.role as string | undefined
-      const userRoles: string[] = (profile as any)?.roles ?? (activeRole ? [activeRole] : [])
+      const activeRole = profileError ? undefined : ((profile as any)?.role as string | undefined)
+      const normalizedActiveRole = activeRole?.trim().toLowerCase() ?? undefined
+      const rawRoles = (profile as any)?.roles as string[] | undefined
+      const userRoles: string[] = profileError
+        ? []
+        : (rawRoles ?? (normalizedActiveRole ? [normalizedActiveRole] : []))
 
-      // Cek apakah role aktif atau salah satu role yang dimiliki ada di allowed
       const hasAccess =
-        (activeRole && allowedRoles.includes(activeRole)) ||
-        userRoles.some(r => allowedRoles.includes(r))
+        (normalizedActiveRole && allowedRoles.includes(normalizedActiveRole)) ||
+        userRoles.some(r => allowedRoles.includes(r.trim().toLowerCase()))
 
       if (!hasAccess) {
         return NextResponse.redirect(new URL('/unauthorized', request.url))

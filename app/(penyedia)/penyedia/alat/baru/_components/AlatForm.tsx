@@ -273,7 +273,7 @@ function AlatFormInner({ userId, defaultProvince, defaultCity, initialData }: Pr
           .from('equipment')
           .insert(insertPayload)
           .select('id')
-          .single()
+          .maybeSingle()
 
         if (insertError) {
           console.error('Insert error:', insertError)

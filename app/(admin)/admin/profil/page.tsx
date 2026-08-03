@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/Badge'
-import { formatRupiah, formatDateID } from '@/lib/utils'
+import { formatRupiah, formatDateID, getDisplayName, getInitials, getEntityLabel } from '@/lib/utils'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
@@ -15,11 +15,15 @@ export default async function AdminProfilPage() {
 
   if (!user) redirect('/login')
 
-  const { data: profileData } = await supabase
+  const { data: profileData, error: profileError } = await supabase
     .from('profiles')
     .select('full_name, phone, email, city, province, role, is_verified, created_at')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
+
+  if (profileError) {
+    throw new Error(profileError.message)
+  }
 
   if (!profileData || profileData.role !== 'admin') redirect('/unauthorized')
 
@@ -41,9 +45,8 @@ export default async function AdminProfilPage() {
       .gte('created_at', new Date(new Date().setHours(0,0,0,0)).toISOString()),
   ])
 
-  const initials = profileData.full_name
-    ? profileData.full_name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()
-    : 'A'
+  const displayName = getDisplayName(profileData.full_name, 'Administrator')
+  const initials = getInitials(profileData.full_name, 'A')
 
   const memberSince = profileData.created_at
     ? formatDateID(profileData.created_at, 'long')
@@ -77,7 +80,7 @@ export default async function AdminProfilPage() {
                 className="text-white font-bold text-2xl sm:text-3xl leading-tight"
                 style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}
               >
-                {profileData.full_name}
+                {displayName}
               </h1>
               <span className="bg-white/20 text-white text-[12px] font-semibold px-3 py-1 rounded-full">
                 🔐 Administrator
@@ -85,17 +88,11 @@ export default async function AdminProfilPage() {
             </div>
 
             <div className="flex flex-wrap gap-4 mt-3">
-              {profileData.phone && (
-                <p className="text-white/80 text-[14px]">📱 {profileData.phone}</p>
-              )}
-              {profileData.email && (
-                <p className="text-white/80 text-[14px] truncate">✉️ {profileData.email}</p>
-              )}
-              {(profileData.city || profileData.province) && (
-                <p className="text-white/80 text-[14px]">
-                  📍 {[profileData.city, profileData.province].filter(Boolean).join(', ')}
-                </p>
-              )}
+              <p className="text-white/80 text-[14px]">📱 {getEntityLabel(profileData.phone, '—')}</p>
+              <p className="text-white/80 text-[14px] truncate">✉️ {getEntityLabel(profileData.email, '—')}</p>
+              <p className="text-white/80 text-[14px]">
+                📍 {getEntityLabel([profileData.city, profileData.province].filter(Boolean).join(', '), '—')}
+              </p>
             </div>
 
             <p className="text-white/50 text-[12px] mt-2">Admin sejak {memberSince}</p>
@@ -192,14 +189,14 @@ export default async function AdminProfilPage() {
             <span className="text-xl">📱</span>
             <div>
               <p className="text-[11px] text-gray-500 font-medium">Telepon</p>
-              <p className="text-[14px] font-semibold text-gray-900">{profileData.phone || '—'}</p>
+              <p className="text-[14px] font-semibold text-gray-900">{getEntityLabel(profileData.phone, '—')}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
             <span className="text-xl">✉️</span>
             <div>
               <p className="text-[11px] text-gray-500 font-medium">Email</p>
-              <p className="text-[14px] font-semibold text-gray-900 truncate">{profileData.email || '—'}</p>
+              <p className="text-[14px] font-semibold text-gray-900 truncate">{getEntityLabel(profileData.email, '—')}</p>
             </div>
           </div>
         </div>

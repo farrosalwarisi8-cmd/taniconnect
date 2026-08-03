@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { cn } from '@/lib/utils'
+import { cn, getDisplayName, getInitials } from '@/lib/utils'
 import type { UserRole } from '@/lib/supabase/client'
 
 const NAV_ITEMS = [
@@ -33,8 +33,7 @@ async function updateProfileRole(
 ): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase.from('profiles') as any)
-    .update({ role: newRole })
-    .eq('id', userId)
+    .upsert({ id: userId, role: newRole }, { onConflict: 'id' })
 }
 
 interface Props {
@@ -101,10 +100,10 @@ export function AdminSidebar({ adminName, userRoles = [] }: Props) {
           className="flex items-center gap-3 p-3 bg-gradient-to-r from-purple-50 to-violet-50 hover:from-purple-100 hover:to-violet-100 rounded-xl border border-purple-100 transition-colors min-h-0"
         >
           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-600 to-violet-700 flex items-center justify-center text-white font-bold text-sm">
-            {adminName[0]?.toUpperCase() ?? 'A'}
+            {getInitials(adminName, 'A')}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-fg-dark truncate">{adminName}</p>
+            <p className="text-sm font-semibold text-fg-dark truncate">{getDisplayName(adminName, 'Administrator')}</p>
             <p className="text-[11px] text-purple-600 font-medium">🔐 Administrator</p>
           </div>
           <Link

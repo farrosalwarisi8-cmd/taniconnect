@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Badge } from '@/components/ui/Badge'
-import { formatRupiah, CATEGORY_LABELS } from '@/lib/utils'
+import { formatRupiah, CATEGORY_LABELS, getDisplayName } from '@/lib/utils'
 
 interface Product {
   id:             string
@@ -24,7 +24,9 @@ interface ProductGridProps {
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 
 function getImageUrl(path: string): string {
+  if (!path) return ''
   if (path.startsWith('http')) return path
+  if (!SUPABASE_URL) return ''
   return `${SUPABASE_URL}/storage/v1/object/public/product-images/${path}`
 }
 
@@ -68,7 +70,7 @@ export function ProductGrid({ products }: ProductGridProps) {
                 {firstImage ? (
                   <img
                     src={getImageUrl(firstImage)}
-                    alt={product.name}
+                    alt={getDisplayName(product.name, 'Produk')}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
                     loading="lazy"
                   />
@@ -96,7 +98,7 @@ export function ProductGrid({ products }: ProductGridProps) {
                 </span>
 
                 <h3 className="text-sm font-bold text-gray-900 line-clamp-2 group-hover:text-green-700 transition-colors leading-snug">
-                  {product.name}
+                  {getDisplayName(product.name, 'Produk')}
                 </h3>
 
                 {product.city && (

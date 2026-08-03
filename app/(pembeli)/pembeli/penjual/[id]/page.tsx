@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { Badge } from '@/components/ui/Badge'
-import { formatRupiah, formatDateID, CATEGORY_LABELS } from '@/lib/utils'
+import { formatRupiah, formatDateID, CATEGORY_LABELS, getDisplayName, getInitials, getFirstName } from '@/lib/utils'
 import type { Metadata } from 'next'
 
 interface Props {
@@ -12,14 +12,18 @@ interface Props {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params
   const supabase = await createServerSupabaseClient()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('profiles')
     .select('full_name, city')
     .eq('id', id)
-    .single()
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(error.message)
+  }
 
   return {
-    title: data ? `${data.full_name} — Profil Penjual` : 'Profil Penjual',
+    title: data ? `${getDisplayName(data.full_name, 'Penjual')} — Profil Penjual` : 'Profil Penjual',
   }
 }
 
@@ -34,14 +38,14 @@ export default async function SellerProfilePage({ params }: Props) {
   const { id } = await params
   const supabase = await createServerSupabaseClient()
 
-  const { data: seller, error } = await supabase
+  const { data: seller, error: sellerError } = await supabase
     .from('profiles')
     .select('id, full_name, city, province, bio, is_verified, rating_avg, rating_count, created_at, avatar_storage_path')
     .eq('id', id)
     .eq('role', 'petani')
-    .single()
+    .maybeSingle()
 
-  if (error || !seller) notFound()
+  if (sellerError || !seller) notFound()
 
   const { data: products } = await supabase
     .from('products')
@@ -52,9 +56,7 @@ export default async function SellerProfilePage({ params }: Props) {
     .order('created_at', { ascending: false })
     .limit(20)
 
-  const initials = seller.full_name
-    ? seller.full_name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()
-    : 'P'
+  const initials = getInitials(seller.full_name, 'P')
 
   const memberSince = seller.created_at
     ? formatDateID(seller.created_at, 'long')
@@ -76,7 +78,7 @@ export default async function SellerProfilePage({ params }: Props) {
             ←
           </Link>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-gray-900 text-[15px] truncate">{seller.full_name}</p>
+            <p className="font-semibold text-gray-900 text-[15px] truncate">{getDisplayName(seller.full_name, 'Penjual')}</p>
             <p className="text-[12px] text-gray-500">Profil Penjual</p>
           </div>
         </div>
@@ -96,7 +98,7 @@ export default async function SellerProfilePage({ params }: Props) {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 flex-wrap">
                 <h1 className="text-white font-bold text-xl sm:text-2xl leading-tight">
-                  {seller.full_name}
+                  {getDisplayName(seller.full_name, 'Penjual')}
                 </h1>
                 {seller.is_verified && (
                   <span className="bg-white/25 text-white text-[11px] font-semibold px-3 py-1 rounded-full flex items-center gap-1">
@@ -147,7 +149,7 @@ export default async function SellerProfilePage({ params }: Props) {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[18px] font-bold text-gray-900">
-              Produk dari {seller.full_name.split(' ')[0]}
+              Produk dari {getFirstName(seller.full_name, 'Penjual')}
             </h2>
             <span className="text-[13px] text-gray-500">{activeProductCount} produk</span>
           </div>

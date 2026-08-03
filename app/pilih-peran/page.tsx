@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
 import { ToastProvider, useToast } from '@/components/ui/Toast'
 import { createClient } from '@/lib/supabase/client'
-import { cn } from '@/lib/utils'
+import { cn, normalizeUserRole } from '@/lib/utils'
 import type { UserRole } from '@/lib/supabase/client'
 
 type SelectableRole = 'petani' | 'pembeli' | 'penyedia_alat'
@@ -100,14 +100,18 @@ function PilihPeranContent() {
         .from('profiles')
         .select('role, roles')
         .eq('id', user.id)
-        .single()
+        .maybeSingle()
 
-      // Cast untuk bypass never inference — sama seperti di file asli
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const profileAny = profile as any
-      const currentRole = profileAny?.role as SelectableRole | undefined
+      const currentRole = normalizeUserRole(profileAny?.role) as SelectableRole | null
       const currentRoles: SelectableRole[] =
-        (profileAny?.roles as SelectableRole[]) ?? (currentRole ? [currentRole] : [])
+        (profileAny?.roles as SelectableRole[] | undefined ?? [])
+          .map(role => normalizeUserRole(role) as SelectableRole | null)
+          .filter((role): role is SelectableRole => Boolean(role))
+
+      if (currentRoles.length === 0 && currentRole) {
+        currentRoles.push(currentRole)
+      }
 
       setUserId(user.id)
       setExistingRoles(currentRoles)

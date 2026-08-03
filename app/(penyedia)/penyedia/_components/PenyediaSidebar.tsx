@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { cn } from '@/lib/utils'
+import { cn, normalizeUserRole } from '@/lib/utils'
 import type { UserRole } from '@/lib/supabase/client'
 
 const NAV_ITEMS = [
@@ -41,8 +41,14 @@ export function PenyediaSidebar({ providerName, userRoles = [] }: Props) {
     setSwitching(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      await supabase.from('profiles').update({ role: newRole }).eq('id', user.id)
-      await supabase.auth.updateUser({ data: { role: newRole } })
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from('profiles') as any)
+          .upsert({ id: user.id, role: newRole }, { onConflict: 'id' })
+        await supabase.auth.updateUser({ data: { role: newRole } })
+      } catch {
+        // ignore and still redirect
+      }
     }
     const dest = OTHER_ROLE_CONFIG[newRole]?.href ?? '/'
     window.location.href = dest
@@ -80,10 +86,10 @@ export function PenyediaSidebar({ providerName, userRoles = [] }: Props) {
       <div className="p-3 border-b border-border">
         <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl border border-blue-100">
           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center text-white font-bold text-sm">
-            {providerName[0]?.toUpperCase() ?? 'P'}
+            {providerName?.trim()?.[0]?.toUpperCase() ?? 'P'}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-fg-dark truncate">{providerName}</p>
+            <p className="text-sm font-semibold text-fg-dark truncate">{providerName || 'Penyedia'}</p>
             <p className="text-[11px] text-blue-600 font-medium">🔧 Penyedia Alat & Bahan</p>
           </div>
           <Link
