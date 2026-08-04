@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taniconnect-v1.1'
+const CACHE_NAME = 'taniconnect-v1.2'
 const OFFLINE_URL = '/offline.html'
 const PRECACHE_URLS = ['/', '/offline.html', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png']
 
@@ -27,6 +27,7 @@ self.addEventListener('fetch', function (event) {
 
   var url = new URL(event.request.url)
 
+  // Skip service worker caching for dynamic API, auth, manifest, and external domains
   if (
     url.hostname.includes('supabase') ||
     url.hostname.includes('groq') ||
@@ -35,7 +36,9 @@ self.addEventListener('fetch', function (event) {
     url.hostname.includes('gstatic') ||
     url.hostname.includes('unsplash') ||
     url.hostname.includes('badanpangan') ||
-    url.pathname.startsWith('/api/')
+    url.pathname.startsWith('/api/') ||
+    url.pathname === '/manifest.json' ||
+    url.pathname.startsWith('/icons/')
   ) {
     return
   }
@@ -73,7 +76,7 @@ self.addEventListener('fetch', function (event) {
         if (event.request.destination === 'image') {
           return caches.match('/icons/icon-192.png')
         }
-        return new Response('Offline', { status: 503 })
+        return new Response('Unavailable', { status: 404 })
       })
     })
   )
