@@ -169,6 +169,21 @@ export default async function ProductDetailPage({ params }: Props) {
                 )}
               </div>
 
+              {/* Pengiriman — Shopee style */}
+              <div className="flex items-start gap-4 mb-6">
+                <span className="text-sm text-gray-500 w-24 shrink-0 pt-1">Pengiriman</span>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-green-600 text-lg">🚚</span>
+                    <span className="text-sm text-gray-800">Dikirim dari <b>{product.city || 'Lokasi Petani'}</b></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400 w-6 text-center">Ongkir</span>
+                    <span className="text-sm text-gray-800">Mulai dari Rp10.000 (Reguler)</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Checkout (quantity, shipping, buy) */}
               <CheckoutClient
                 productId={product.id}
