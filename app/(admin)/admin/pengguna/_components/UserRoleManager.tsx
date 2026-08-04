@@ -24,10 +24,10 @@ interface Props {
 }
 
 const AVAILABLE_ROLES = [
-  { value: 'pembeli', label: '🛒 Pembeli', desc: 'Beli produk hasil panen' },
-  { value: 'petani', label: '🌾 Petani', desc: 'Jual hasil panen & catat keuangan' },
-  { value: 'penyedia_alat', label: '🚜 Penyedia Alat', desc: 'Sewakan / jual alat & bahan tani' },
-  { value: 'admin', label: '🔐 Administrator', desc: 'Akses penuh ke Admin Panel' },
+  { value: 'pembeli', label: '🛒 Pembeli', desc: 'Beli produk hasil panen', adminOnly: false },
+  { value: 'petani', label: '🌾 Petani', desc: 'Jual hasil panen & catat keuangan', adminOnly: false },
+  { value: 'penyedia_alat', label: '🚜 Penyedia Alat', desc: 'Sewakan / jual alat & bahan tani', adminOnly: false },
+  { value: 'admin', label: '🔐 Administrator', desc: 'Akses penuh ke Admin Panel — hanya admin yang bisa assign', adminOnly: true },
 ]
 
 export function UserRoleManager({ initialUsers }: Props) {
@@ -277,11 +277,14 @@ export function UserRoleManager({ initialUsers }: Props) {
               </button>
             </div>
 
-            {/* Checkbox multi-roles */}
+            {/* Checkbox multi-roles — admin role hanya tersedia di panel admin */}
             <div>
               <label className="block text-xs font-bold text-fg/70 uppercase tracking-wider mb-2">
                 Pilih Role yang Dimiliki User
               </label>
+              <p className="text-xs text-fg/50 mb-3">
+                Role <strong>Administrator</strong> hanya bisa diberikan oleh admin melalui halaman ini.
+              </p>
               <div className="space-y-2">
                 {AVAILABLE_ROLES.map((r) => {
                   const isChecked = selectedRoles.has(r.value)
@@ -298,6 +301,9 @@ export function UserRoleManager({ initialUsers }: Props) {
                       <div>
                         <p className="font-bold text-sm text-fg-dark">{r.label}</p>
                         <p className="text-xs text-fg/60">{r.desc}</p>
+                        {r.adminOnly && (
+                          <p className="text-[10px] text-purple-600 font-semibold mt-0.5">Khusus Admin</p>
+                        )}
                       </div>
                       <input
                         type="checkbox"
@@ -351,5 +357,13 @@ export function UserRoleManager({ initialUsers }: Props) {
         </div>
       )}
     </div>
+  )
+}
+
+export function UserRoleManagerWithToast(props: Props) {
+  return (
+    <ToastProvider>
+      <UserRoleManager {...props} />
+    </ToastProvider>
   )
 }

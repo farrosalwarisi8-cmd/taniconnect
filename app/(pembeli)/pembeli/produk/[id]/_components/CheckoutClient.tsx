@@ -2,19 +2,17 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/Button'
 import { ToastProvider, useToast } from '@/components/ui/Toast'
 import { formatRupiah, generateIdempotencyKey, getDisplayName } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 
-// Type deklarasi untuk Midtrans Snap yang di-inject via <script>
 declare global {
   interface Window {
     snap: {
       pay: (token: string, callbacks: {
-        onSuccess?: (result: any) => void
-        onPending?: (result: any) => void
-        onError?:   (result: any) => void
+        onSuccess?: (result: unknown) => void
+        onPending?: (result: unknown) => void
+        onError?:   (result: unknown) => void
         onClose?:   () => void
       }) => void
     }
@@ -51,14 +49,12 @@ function CheckoutFlow(props: Props) {
   const [user, setUser] = useState<{ id: string } | null>(null)
 
   useEffect(() => {
-    // Load user (async/await pattern supaya TypeScript happy)
     const loadUser = async () => {
       const { data } = await supabase.auth.getUser()
       setUser(data.user ? { id: data.user.id } : null)
     }
     loadUser()
 
-    // Load Midtrans Snap script
     const scriptId = 'midtrans-snap-script'
     if (typeof window !== 'undefined' && window.snap) {
       setSnapReady(true)
@@ -83,6 +79,7 @@ function CheckoutFlow(props: Props) {
   const shippingCost = SHIPPING_OPTIONS.find(o => o.value === shipping)?.cost ?? 0
   const subtotal = props.pricePerUnit * quantity
   const total    = subtotal + shippingCost
+  const outOfStock = props.maxQuantity < 1
 
   const handleCheckout = async () => {
     if (!user) {
@@ -129,7 +126,6 @@ function CheckoutFlow(props: Props) {
         throw new Error('Token pembayaran tidak tersedia')
       }
 
-      // Buka Midtrans Snap popup
       window.snap.pay(snap_token, {
         onSuccess: () => {
           toast('Pembayaran berhasil!', 'success')
@@ -146,73 +142,75 @@ function CheckoutFlow(props: Props) {
           toast('Kamu menutup jendela pembayaran', 'warning')
         },
       })
-    } catch (err: any) {
-      toast(err.message ?? 'Gagal proses checkout', 'error')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Gagal proses checkout'
+      toast(message, 'error')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="space-y-6 border-t border-border pt-6">
-      {/* Jumlah */}
-      <div>
-        <label className="text-sm font-semibold text-fg mb-3 block">Jumlah</label>
-        <div className="flex items-center gap-4">
+    <>
+      {/* Jumlah — ala Shopee row layout */}
+      <div className="flex items-center gap-4 mb-5">
+        <span className="text-sm text-gray-500 w-24 shrink-0">Jumlah</span>
+        <div className="flex items-center border border-gray-300 rounded-sm">
           <button
             type="button"
             onClick={() => setQuantity(q => Math.max(1, q - 1))}
-            className="w-12 h-12 rounded-sm border border-border bg-white text-2xl font-semibold hover:bg-surface-light min-h-0"
+            disabled={outOfStock}
+            className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40 min-h-0"
             aria-label="Kurangi"
           >
             −
           </button>
-          <div className="flex-1 text-center">
-            <div className="text-h2 text-fg-dark">{quantity}</div>
-            <div className="text-caption text-fg/60">{props.unit}</div>
-          </div>
+          <span className="w-12 text-center text-sm font-medium border-x border-gray-300 py-1">
+            {quantity}
+          </span>
           <button
             type="button"
             onClick={() => setQuantity(q => Math.min(props.maxQuantity, q + 1))}
-            className="w-12 h-12 rounded-sm border border-border bg-white text-2xl font-semibold hover:bg-surface-light min-h-0"
+            disabled={outOfStock}
+            className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40 min-h-0"
             aria-label="Tambah"
           >
             +
           </button>
         </div>
-        <p className="text-caption text-fg/60 mt-2 text-center">
-          Maksimal {props.maxQuantity} {props.unit}
-        </p>
+        <span className="text-xs text-gray-400">
+          {props.maxQuantity} {props.unit} tersedia
+        </span>
       </div>
 
       {/* Pengiriman */}
-      <div>
-        <label className="text-sm font-semibold text-fg mb-3 block">Metode Pengiriman</label>
-        <div className="space-y-2">
+      <div className="flex items-start gap-4 mb-5">
+        <span className="text-sm text-gray-500 w-24 shrink-0 pt-1">Pengiriman</span>
+        <div className="flex-1 space-y-2">
           {SHIPPING_OPTIONS.map(opt => (
             <label
               key={opt.value}
-              className={`flex items-center justify-between p-4 rounded-sm border-2 cursor-pointer transition-all min-h-0 ${
+              className={`flex items-center justify-between p-3 rounded-sm border cursor-pointer transition-all min-h-0 ${
                 shipping === opt.value
-                  ? 'border-primary bg-green-50'
-                  : 'border-border hover:border-primary-light'
+                  ? 'border-[#ee4d2d] bg-orange-50'
+                  : 'border-gray-200 hover:border-gray-300'
               }`}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <input
                   type="radio"
                   name="shipping"
                   value={opt.value}
                   checked={shipping === opt.value}
                   onChange={e => setShipping(e.target.value as ShippingMethod)}
-                  className="w-5 h-5 accent-primary min-h-0"
+                  className="accent-[#ee4d2d] min-h-0"
                 />
                 <div>
-                  <div className="font-semibold text-fg-dark">{opt.label}</div>
-                  <div className="text-caption text-fg/60">{opt.desc}</div>
+                  <div className="text-sm font-medium text-gray-800">{opt.label}</div>
+                  <div className="text-xs text-gray-400">{opt.desc}</div>
                 </div>
               </div>
-              <div className="font-semibold text-primary-dark">
+              <div className="text-sm font-medium text-[#ee4d2d]">
                 {opt.cost === 0 ? 'Gratis' : formatRupiah(opt.cost)}
               </div>
             </label>
@@ -220,40 +218,93 @@ function CheckoutFlow(props: Props) {
         </div>
       </div>
 
-      {/* Ringkasan */}
-      <div className="bg-surface-light rounded-sm p-4 space-y-2">
-        <div className="flex justify-between text-body">
-          <span className="text-fg/70">Subtotal ({quantity} {props.unit})</span>
-          <span className="font-semibold">{formatRupiah(subtotal)}</span>
+      {/* Ringkasan harga */}
+      <div className="border-t border-gray-100 pt-4 mb-4 space-y-2">
+        <div className="flex justify-between text-sm text-gray-600">
+          <span>Subtotal ({quantity} {props.unit})</span>
+          <span>{formatRupiah(subtotal)}</span>
         </div>
-        <div className="flex justify-between text-body">
-          <span className="text-fg/70">Ongkir</span>
-          <span className="font-semibold">{shippingCost === 0 ? 'Gratis' : formatRupiah(shippingCost)}</span>
+        <div className="flex justify-between text-sm text-gray-600">
+          <span>Ongkos Kirim</span>
+          <span>{shippingCost === 0 ? 'Gratis' : formatRupiah(shippingCost)}</span>
         </div>
-        <div className="border-t border-border pt-2 flex justify-between items-baseline">
-          <span className="text-h4 text-fg-dark">Total</span>
-          <span className="text-h2 text-primary-dark font-bold">{formatRupiah(total)}</span>
+        <div className="flex justify-between items-baseline pt-2 border-t border-gray-100">
+          <span className="text-base text-gray-800">Total Pembayaran</span>
+          <span className="text-2xl font-medium text-[#ee4d2d]">{formatRupiah(total)}</span>
         </div>
       </div>
 
-      {/* Info escrow */}
-      <div className="bg-green-50 border border-primary-light rounded-sm p-4">
-        <p className="text-sm text-primary-dark">
-          🔒 <strong>Dana aman.</strong> Uangmu ditahan oleh TaniConnect dan baru diteruskan ke petani setelah kamu konfirmasi barang diterima.
+      {/* Escrow info */}
+      <div className="bg-green-50 border border-green-100 rounded-sm p-3 mb-5">
+        <p className="text-xs text-green-700">
+          🔒 Dana aman — uang ditahan TaniConnect dan diteruskan ke petani setelah kamu konfirmasi barang diterima.
         </p>
       </div>
 
-      {/* CTA */}
-      <Button
-        onClick={handleCheckout}
-        fullWidth
-        size="lg"
-        loading={loading}
-        disabled={props.maxQuantity < 1}
-      >
-        {props.maxQuantity < 1 ? 'Stok Habis' : `Bayar Sekarang · ${formatRupiah(total)}`}
-      </Button>
-    </div>
+      {/* Desktop buttons — ala Shopee */}
+      <div className="hidden lg:flex gap-3 mt-auto">
+        <button
+          type="button"
+          disabled={outOfStock || loading}
+          onClick={handleCheckout}
+          className="flex-1 py-3 border border-[#ee4d2d] text-[#ee4d2d] font-medium rounded-sm hover:bg-orange-50 disabled:opacity-50 transition-colors"
+        >
+          {outOfStock ? 'Stok Habis' : 'Masukkan Keranjang'}
+        </button>
+        <button
+          type="button"
+          disabled={outOfStock || loading}
+          onClick={handleCheckout}
+          className="flex-1 py-3 bg-[#ee4d2d] hover:bg-[#d73211] text-white font-medium rounded-sm disabled:opacity-50 transition-colors"
+        >
+          {loading ? 'Memproses...' : outOfStock ? 'Stok Habis' : 'Beli Sekarang'}
+        </button>
+      </div>
+
+      {/* Mobile sticky bottom bar — ala Shopee */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.08)]">
+        <div className="flex items-center px-3 py-2 gap-2">
+          <Link
+            href="/pembeli/marketplace"
+            className="flex flex-col items-center justify-center w-12 text-[10px] text-gray-500 min-h-0"
+          >
+            <span className="text-lg">🏠</span>
+            Beranda
+          </Link>
+          <div className="flex-1 flex gap-2">
+            <button
+              type="button"
+              disabled={outOfStock || loading}
+              onClick={handleCheckout}
+              className="flex-1 py-2.5 border border-[#ee4d2d] text-[#ee4d2d] text-sm font-medium rounded-sm disabled:opacity-50"
+            >
+              Keranjang
+            </button>
+            <button
+              type="button"
+              disabled={outOfStock || loading}
+              onClick={handleCheckout}
+              className="flex-[2] py-2.5 bg-[#ee4d2d] text-white text-sm font-medium rounded-sm disabled:opacity-50"
+            >
+              {loading ? '...' : outOfStock ? 'Habis' : `Beli · ${formatRupiah(total)}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function Link({ href, className, children }: { href: string; className?: string; children: React.ReactNode }) {
+  const router = useRouter()
+  return (
+    <a
+      href={href}
+      className={className}
+      onClick={e => { e.preventDefault(); router.push(href) }}
+    >
+      {children}
+    </a>
   )
 }
 

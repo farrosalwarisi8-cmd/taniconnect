@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { UserRoleManager, type UserProfileItem } from './_components/UserRoleManager'
+import { UserRoleManagerWithToast, type UserProfileItem } from './_components/UserRoleManager'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,7 +43,7 @@ export default async function AdminPenggunaPage() {
         </div>
       </div>
 
-      <UserRoleManager initialUsers={users} />
+      <UserRoleManagerWithToast initialUsers={users} />
     </div>
   )
 }

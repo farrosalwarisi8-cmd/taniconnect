@@ -60,17 +60,6 @@ function RegisterFlow() {
       }
       if (!authData.user) throw new Error('Gagal membuat akun')
 
-      // Init roles array dengan 'pembeli' sebagai default
-      await supabase
-        .from('profiles')
-        .upsert({
-          id: authData.user.id,
-          role: 'pembeli',
-          roles: ['pembeli'],
-          full_name: fullName,
-          phone: phone || null,
-        }, { onConflict: 'id' })
-
       // ─── 2. CEK SESSION — kalau belum ada, LOGIN MANUAL ─────
       if (!authData.session) {
         const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -83,27 +72,23 @@ function RegisterFlow() {
         }
       }
 
-      // ─── 3. UPDATE PROFILE dengan data lokasi ────────────────
-      const profileUpdate = {
-        province: data.province,
-        city: data.city,
-        district: data.district,
-        address: data.address,
-      }
-
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert({
-          id: authData.user.id,
-          ...profileUpdate,
-          role: 'pembeli',
-          roles: ['pembeli'],
+      // ─── 3. SETUP PROFILE via API (bypass RLS) ───────────────
+      const setupRes = await fetch('/api/auth/setup-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           full_name: fullName,
           phone: phone || null,
-        }, { onConflict: 'id' })
+          province: data.province,
+          city: data.city,
+          district: data.district,
+          address: data.address,
+        }),
+      })
 
-      if (profileError) {
-        // Non-critical: profil masih bisa diupdate nanti
+      if (!setupRes.ok) {
+        const errData = await setupRes.json().catch(() => ({}))
+        throw new Error(errData.error ?? 'Gagal setup profil')
       }
 
       toast('Registrasi berhasil! Silakan pilih peranmu', 'success', 3000)

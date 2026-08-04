@@ -12,7 +12,7 @@ import { createClient } from '@/lib/supabase/client'
 import { loginSchema, type LoginInput } from '@/lib/validations'
 import type { UserRole } from '@/lib/supabase/client'
 import { ROLE_CONFIG } from '@/lib/role-config'
-import { normalizeUserRole } from '@/lib/utils'
+import { resolveUserRoles, getSafeRedirectPath } from '@/lib/role-access'
 
 interface ProfileRoleData {
   role:  UserRole | null
@@ -105,7 +105,9 @@ function LoginForm() {
       await supabase.auth.updateUser({ data: { role: selectedRole } })
     }
 
-    const destination = redirectTo ?? ROLE_CONFIG[selectedRole]?.href ?? '/pembeli/marketplace'
+    const destination = redirectTo
+      ? getSafeRedirectPath(redirectTo, resolveUserRoles({ dbRole: selectedRole, dbRoles: [selectedRole] }))
+      : ROLE_CONFIG[selectedRole]?.href ?? '/pembeli/marketplace'
     window.location.href = destination
   }
 
@@ -144,28 +146,25 @@ function LoginForm() {
       }
 
       const profileData = (rawProfile ?? null) as ProfileRoleData | null
-      const rolesFromProfile = Array.isArray(profileData?.roles) ? profileData.roles : []
 
-      const normalizedRole = normalizeUserRole(profileData?.role) as UserRole | null
-      const normalizedRoles = rolesFromProfile
-        .map(role => normalizeUserRole(role) as UserRole | null)
-        .filter((role): role is UserRole => Boolean(role))
+      const resolved = resolveUserRoles({
+        dbRole: profileData?.role,
+        dbRoles: profileData?.roles,
+        metaRole: authData.user.user_metadata?.role as string | undefined,
+        metaRoles: authData.user.user_metadata?.roles as string[] | undefined,
+      })
 
-      const userRoles: UserRole[] =
-        normalizedRoles.length > 0
-          ? normalizedRoles
-          : normalizedRole
-            ? [normalizedRole]
-            : ['pembeli']
+      const userRoles = resolved.roles
 
       if (redirectTo) {
-        setTimeout(() => { window.location.href = redirectTo }, 800)
+        const safeRedirect = getSafeRedirectPath(redirectTo, resolved)
+        setTimeout(() => { window.location.href = safeRedirect }, 800)
         return
       }
 
       if (userRoles.length > 1) {
         setAvailableRoles(userRoles)
-        setActiveRole(normalizedRole ?? null)
+        setActiveRole(resolved.activeRole ?? null)
         setLoading(false)
         setTimeout(() => setShowRoleSelector(true), 800)
         return

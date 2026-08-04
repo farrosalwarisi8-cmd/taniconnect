@@ -1,15 +1,14 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { ProductImageGallery } from './_components/ProductImageGallery'
 import { CheckoutClient } from './_components/CheckoutClient'
-import { Badge } from '@/components/ui/Badge'
-import { formatRupiah, CATEGORY_LABELS, getDisplayName, getInitials, getFirstName } from '@/lib/utils'
+import { formatRupiah, CATEGORY_LABELS, getDisplayName, getInitials } from '@/lib/utils'
 
 interface Props {
   params: Promise<{ id: string }>
 }
 
-// Type manual untuk hasil query dengan join
 type SellerData = {
   id: string
   full_name: string
@@ -68,145 +67,202 @@ export default async function ProductDetailPage({ params }: Props) {
       : `${SUPABASE_URL}/storage/v1/object/public/product-images/${p}`
   )
 
+  const ratingAvg = seller?.rating_avg ?? 0
+  const ratingCount = seller?.rating_count ?? 0
+  const inStock = product.stock_quantity > 0
+
   return (
-    <main className="min-h-screen bg-white pb-32 sm:pb-8">
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-nav border-b border-border">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+    <main className="min-h-screen bg-[#f5f5f5] pb-24 lg:pb-8">
+      {/* Breadcrumb / Header — ala Shopee */}
+      <header className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-[1200px] mx-auto px-4 py-3 flex items-center gap-3">
           <Link
             href="/pembeli/marketplace"
-            className="w-12 h-12 rounded-full bg-white border border-border shadow-sm flex items-center justify-center hover:bg-surface-light min-h-0"
-            aria-label="Kembali ke marketplace"
+            className="text-gray-500 hover:text-[#ee4d2d] text-sm flex items-center gap-1 min-h-0"
           >
-            ←
+            ← Marketplace
           </Link>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="w-12 h-12 rounded-full bg-white border border-border shadow-sm flex items-center justify-center hover:bg-surface-light min-h-0"
-              aria-label="Bagikan"
-            >
-              🔗
-            </button>
-            <button
-              type="button"
-              className="w-12 h-12 rounded-full bg-white border border-border shadow-sm flex items-center justify-center hover:bg-surface-light min-h-0"
-              aria-label="Simpan ke wishlist"
-            >
-              ♡
-            </button>
-          </div>
+          <span className="text-gray-300">/</span>
+          <span className="text-sm text-gray-600 truncate">
+            {CATEGORY_LABELS[product.category] ?? product.category}
+          </span>
         </div>
       </header>
 
-      <div className="relative aspect-square sm:aspect-video bg-surface-light">
-        {images[0] ? (
-          <img src={images[0]} alt={getDisplayName(product.name, 'Produk')} className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-8xl">🌾</div>
-        )}
-
-        {seller?.is_verified && (
-          <div className="absolute bottom-4 left-4">
-            <Badge variant="verified" size="md">✓ Penjual Terverifikasi</Badge>
-          </div>
-        )}
-      </div>
-
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Badge variant="neutral" size="sm">
-              {CATEGORY_LABELS[product.category] ?? product.category}
-            </Badge>
-            {product.stock_quantity > 0 && (
-              <Badge variant="success" size="sm">
-                Stok: {product.stock_quantity} {product.unit}
-              </Badge>
-            )}
-          </div>
-          <h1 className="text-[28px] sm:text-[36px] font-bold text-fg-dark leading-tight mb-3">
-            {getDisplayName(product.name, 'Produk')}
-          </h1>
-          <div className="flex items-baseline gap-2">
-            <span className="text-[36px] sm:text-[44px] font-extrabold text-primary-dark leading-none" style={{ fontFamily: "'Bricolage Grotesque', ui-sans-serif" }}>
-              {formatRupiah(product.price_per_unit)}
-            </span>
-            <span className="text-body text-fg/60">/ {product.unit}</span>
-          </div>
-          {product.city && (
-            <p className="text-body text-fg/70 mt-2">📍 {product.city}, {product.province}</p>
-          )}
-        </div>
-
-        {seller && (
-          <div className="border border-gray-200 rounded-2xl overflow-hidden">
-            {/* Seller card header */}
-            <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-5 py-3 border-b border-gray-100">
-              <p className="text-[12px] font-semibold text-green-800 uppercase tracking-wide">Dijual oleh</p>
+      <div className="max-w-[1200px] mx-auto px-4 py-4">
+        {/* Main card — 2 kolom ala Shopee */}
+        <div className="bg-white rounded-sm shadow-sm overflow-hidden">
+          <div className="grid lg:grid-cols-[420px_1fr] gap-0">
+            {/* Kiri: Galeri foto */}
+            <div className="p-4 lg:p-6 lg:border-r border-gray-100">
+              <ProductImageGallery
+                images={images}
+                productName={getDisplayName(product.name, 'Produk')}
+              />
             </div>
-            <div className="p-4 flex items-center gap-4">
-              {/* Avatar */}
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-green-100 to-green-200 text-green-800 flex items-center justify-center font-bold text-xl shrink-0 shadow-sm">
-                {getInitials(seller.full_name, 'P')}
+
+            {/* Kanan: Info produk */}
+            <div className="p-4 lg:p-6 flex flex-col">
+              {/* Nama produk */}
+              <h1 className="text-xl lg:text-2xl font-medium text-gray-900 leading-snug mb-3">
+                {getDisplayName(product.name, 'Produk')}
+              </h1>
+
+              {/* Rating & lokasi */}
+              <div className="flex flex-wrap items-center gap-3 mb-4 pb-4 border-b border-gray-100">
+                <div className="flex items-center gap-1">
+                  <span className="text-[#ee4d2d] font-semibold text-sm border-b border-[#ee4d2d]">
+                    {ratingAvg.toFixed(1)}
+                  </span>
+                  <div className="flex">
+                    {[1, 2, 3, 4, 5].map(i => (
+                      <span
+                        key={i}
+                        className={`text-sm ${i <= Math.round(ratingAvg) ? 'text-[#ee4d2d]' : 'text-gray-200'}`}
+                      >
+                        ★
+                      </span>
+                    ))}
+                  </div>
+                  <span className="text-gray-400 text-sm ml-1">
+                    | {ratingCount} Penilaian
+                  </span>
+                </div>
+                {product.city && (
+                  <>
+                    <span className="text-gray-300">|</span>
+                    <span className="text-sm text-gray-500">
+                      📍 {product.city}{product.province ? `, ${product.province}` : ''}
+                    </span>
+                  </>
+                )}
               </div>
 
+              {/* Harga — orange Shopee style */}
+              <div className="bg-[#fafafa] px-4 py-3 mb-4 flex items-baseline gap-2">
+                <span className="text-sm text-gray-500">Harga</span>
+                <span className="text-3xl font-medium text-[#ee4d2d]">
+                  {formatRupiah(product.price_per_unit)}
+                </span>
+                <span className="text-gray-500 text-sm">/ {product.unit}</span>
+              </div>
+
+              {/* Info stok & kategori */}
+              <div className="space-y-3 mb-6">
+                <div className="flex items-start gap-4">
+                  <span className="text-sm text-gray-500 w-24 shrink-0 pt-0.5">Kategori</span>
+                  <span className="text-sm text-gray-800">
+                    {CATEGORY_LABELS[product.category] ?? product.category}
+                  </span>
+                </div>
+                <div className="flex items-start gap-4">
+                  <span className="text-sm text-gray-500 w-24 shrink-0 pt-0.5">Stok</span>
+                  <span className={`text-sm font-medium ${inStock ? 'text-green-600' : 'text-red-500'}`}>
+                    {inStock ? `${product.stock_quantity} ${product.unit} tersedia` : 'Stok habis'}
+                  </span>
+                </div>
+                {product.harvest_date && (
+                  <div className="flex items-start gap-4">
+                    <span className="text-sm text-gray-500 w-24 shrink-0 pt-0.5">Panen</span>
+                    <span className="text-sm text-gray-800">{product.harvest_date}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Checkout (quantity, shipping, buy) */}
+              <CheckoutClient
+                productId={product.id}
+                productName={product.name}
+                pricePerUnit={product.price_per_unit}
+                unit={product.unit}
+                maxQuantity={product.stock_quantity}
+                isAuction={product.is_auction}
+                currentBid={product.current_bid}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Seller shop card — ala Shopee */}
+        {seller && (
+          <div className="bg-white rounded-sm shadow-sm mt-4 p-4 lg:p-5">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-green-400 to-green-600 text-white flex items-center justify-center font-bold text-lg shrink-0 border-2 border-white shadow">
+                {getInitials(seller.full_name, 'P')}
+              </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-bold text-gray-900 text-[15px] truncate">{getDisplayName(seller.full_name, 'Penjual')}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-gray-900 truncate">
+                    {getDisplayName(seller.full_name, 'Penjual')}
+                  </p>
                   {seller.is_verified && (
-                    <span className="bg-green-100 text-green-700 text-[11px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <span className="bg-blue-50 text-blue-600 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-blue-100">
                       ✓ Terverifikasi
                     </span>
                   )}
                 </div>
-
-                {/* Rating */}
-                <div className="flex items-center gap-1.5 mt-1">
-                  <div className="flex">
-                    {[1,2,3,4,5].map(i => (
-                      <span key={i} className={`text-[14px] ${i <= Math.round(seller.rating_avg ?? 0) ? 'text-amber-400' : 'text-gray-200'}`}>★</span>
-                    ))}
-                  </div>
-                  <span className="text-[13px] text-gray-600 font-medium">
-                    {seller.rating_avg?.toFixed(1) ?? '—'}
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-xs text-gray-500">
+                    ⭐ {ratingAvg.toFixed(1)} · {ratingCount} ulasan
                   </span>
-                  <span className="text-[12px] text-gray-400">
-                    ({seller.rating_count ?? 0} ulasan)
-                  </span>
+                  {seller.city && (
+                    <span className="text-xs text-gray-400">· 📍 {seller.city}</span>
+                  )}
                 </div>
-
-                {seller.city && (
-                  <p className="text-[12px] text-gray-500 mt-0.5">📍 {seller.city}</p>
-                )}
               </div>
-
-              {/* CTA */}
-              <Link
-                href={`/pembeli/penjual/${seller.id}`}
-                className="shrink-0 px-3 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold text-[12px] rounded-xl transition-colors shadow-sm min-h-0 touch-target-exempt"
-              >
-                Lihat Profil →
-              </Link>
+              <div className="flex gap-2 shrink-0">
+                <Link
+                  href={`/pembeli/chat/${seller.id}`}
+                  className="px-4 py-2 border border-[#ee4d2d] text-[#ee4d2d] text-sm font-medium rounded-sm hover:bg-orange-50 transition-colors min-h-0"
+                >
+                  💬 Chat
+                </Link>
+                <Link
+                  href={`/pembeli/penjual/${seller.id}`}
+                  className="px-4 py-2 bg-[#ee4d2d] text-white text-sm font-medium rounded-sm hover:bg-[#d73211] transition-colors min-h-0"
+                >
+                  Kunjungi Toko
+                </Link>
+              </div>
             </div>
           </div>
         )}
 
-        {product.description && (
-          <div>
-            <h2 className="text-h2 text-fg-dark mb-2">Tentang Produk</h2>
-            <p className="text-body text-fg whitespace-pre-line">{product.description}</p>
+        {/* Detail produk */}
+        <div className="bg-white rounded-sm shadow-sm mt-4 p-4 lg:p-6">
+          <h2 className="text-lg font-medium text-gray-900 mb-4 pb-3 border-b border-gray-100 uppercase tracking-wide">
+            Detail Produk
+          </h2>
+          <div className="grid sm:grid-cols-2 gap-3 mb-6">
+            <div className="flex gap-4 py-2">
+              <span className="text-sm text-gray-400 w-32 shrink-0">Kategori</span>
+              <span className="text-sm text-gray-800">{CATEGORY_LABELS[product.category] ?? product.category}</span>
+            </div>
+            <div className="flex gap-4 py-2">
+              <span className="text-sm text-gray-400 w-32 shrink-0">Satuan</span>
+              <span className="text-sm text-gray-800">{product.unit}</span>
+            </div>
+            <div className="flex gap-4 py-2">
+              <span className="text-sm text-gray-400 w-32 shrink-0">Stok</span>
+              <span className="text-sm text-gray-800">{product.stock_quantity} {product.unit}</span>
+            </div>
+            {product.city && (
+              <div className="flex gap-4 py-2">
+                <span className="text-sm text-gray-400 w-32 shrink-0">Asal</span>
+                <span className="text-sm text-gray-800">{product.city}, {product.province}</span>
+              </div>
+            )}
           </div>
-        )}
 
-        <CheckoutClient
-          productId={product.id}
-          productName={product.name}
-          pricePerUnit={product.price_per_unit}
-          unit={product.unit}
-          maxQuantity={product.stock_quantity}
-          isAuction={product.is_auction}
-          currentBid={product.current_bid}
-        />
+          {product.description && (
+            <>
+              <h3 className="text-base font-medium text-gray-900 mb-3">Deskripsi Produk</h3>
+              <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">
+                {product.description}
+              </p>
+            </>
+          )}
+        </div>
       </div>
     </main>
   )

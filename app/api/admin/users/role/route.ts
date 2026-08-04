@@ -52,6 +52,25 @@ export async function POST(request: Request) {
       ? newRoles
       : [newRole]
 
+    // Hanya admin yang boleh assign role admin ke user lain
+    const assigningAdmin =
+      newRole === 'admin' || updatedRoles.includes('admin')
+
+    if (assigningAdmin && !isRequesterAdmin) {
+      return NextResponse.json(
+        { error: 'Hanya administrator yang dapat memberikan role admin.' },
+        { status: 403 }
+      )
+    }
+
+    // Non-admin tidak boleh menghapus role admin dari user (edge case)
+    if (!isRequesterAdmin && updatedRoles.includes('admin')) {
+      return NextResponse.json(
+        { error: 'Role admin hanya dapat dikelola oleh administrator.' },
+        { status: 403 }
+      )
+    }
+
     // Gunakan admin service client untuk bypass RLS & update auth metadata
     const adminSupabase = createAdminSupabaseClient()
 

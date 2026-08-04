@@ -51,23 +51,24 @@ const ROLE_DESTINATIONS: Record<SelectableRole, string> = {
   penyedia_alat: '/penyedia/dashboard',
 }
 
-// ─── Helper: update roles + role aktif tanpa TypeScript never error ───────────
-// Root cause: @supabase/ssr tidak selalu resolve Update<'profiles'> type
-// dari Database generic — menghasilkan `never` untuk argumen .update().
-// Fix: cast .from() result ke `any` secara terlokalisir.
+// ─── Helper: update roles via API (bypass RLS, blokir admin) ────────────────
 async function updateProfileRoles(
-  supabase: ReturnType<typeof createClient>,
-  userId: string,
   roles: SelectableRole[],
   activeRole: SelectableRole,
 ): Promise<{ error: Error | null }> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase.from('profiles') as any)
-      .update({ roles, role: activeRole })
-      .eq('id', userId)
+    const res = await fetch('/api/profile/roles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roles, activeRole }),
+    })
 
-    return { error: error ?? null }
+    const data = await res.json()
+    if (!res.ok) {
+      return { error: new Error(data.error ?? 'Gagal menyimpan peran') }
+    }
+
+    return { error: null }
   } catch (err) {
     return { error: err instanceof Error ? err : new Error(String(err)) }
   }
@@ -167,8 +168,6 @@ function PilihPeranContent() {
 
       // ── Update roles + role aktif di profile ─────────────────────────────
       const { error: profileError } = await updateProfileRoles(
-        supabase,
-        userId,
         rolesArray,
         newActiveRole,
       )
