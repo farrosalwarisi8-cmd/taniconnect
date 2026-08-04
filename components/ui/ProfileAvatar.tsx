@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
@@ -59,6 +59,17 @@ export function ProfileAvatar() {
   const [activeMode, setActiveMode] = useState<ActiveMode>('pembeli')
   const [showModeSwitcher, setShowModeSwitcher] = useState(false)
 
+  const pathname = usePathname()
+
+  // Sinkronisasi Active Mode berdasarkan URL (agar UI & URL tidak bentrok)
+  useEffect(() => {
+    if (!pathname) return
+    if (pathname.startsWith('/petani')) setActiveMode('petani')
+    else if (pathname.startsWith('/pembeli')) setActiveMode('pembeli')
+    else if (pathname.startsWith('/penyedia')) setActiveMode('penyedia_alat')
+    else if (pathname.startsWith('/admin')) setActiveMode('admin')
+  }, [pathname])
+
   useEffect(() => {
     const loadUser = async () => {
       try {
@@ -72,17 +83,22 @@ export function ProfileAvatar() {
           .single()
 
         if (profile) {
-          const dbRole = (profile as any).role ?? 'pembeli'
+          // Ambil meta dari jwt jika DB usang
+          const metaRole = authUser.user_metadata?.role
+          const dbRole = (profile as any).role ?? metaRole ?? 'pembeli'
+          
           setUser({
             id: authUser.id,
-            fullName: (profile as any).full_name ?? 'User',
+            fullName: authUser.user_metadata?.full_name ?? (profile as any).full_name ?? 'User',
             dbRole,
-            initial: ((profile as any).full_name?.[0] ?? 'U').toUpperCase(),
+            initial: (authUser.user_metadata?.full_name?.[0] ?? (profile as any).full_name?.[0] ?? 'U').toUpperCase(),
           })
 
-          // Load active mode dari localStorage, fallback ke dbRole
+          // Active mode prioritas: 1. URL path (sudah dihandle effect atas), 2. LocalStorage, 3. dbRole
           const savedMode = localStorage.getItem('taniconnect_active_mode') as ActiveMode | null
-          setActiveMode(savedMode && ALL_MODES.includes(savedMode) ? savedMode : dbRole as ActiveMode)
+          if (!pathname?.match(/^\/(petani|pembeli|penyedia|admin)/)) {
+             setActiveMode(savedMode && ALL_MODES.includes(savedMode) ? savedMode : dbRole as ActiveMode)
+          }
         }
       } catch { setUser(null) }
       finally { setLoading(false) }
