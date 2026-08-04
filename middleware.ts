@@ -139,4 +139,4 @@ export const config = {
   matcher: [
     '/((?!_next/static|_next/image|favicon.ico|icons|manifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|json)$).*)',
   ],
-}
+}
