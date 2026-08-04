@@ -6,8 +6,7 @@ const SELF_SERVICE_ROLES: UserRole[] = ['petani', 'pembeli', 'penyedia_alat']
 
 /**
  * GET /api/user/roles
- * Ambil role terbaru dari database (bukan dari JWT/cache).
- * Dipakai oleh client setelah switch role untuk re-sync state.
+ * Ambil role terbaru dari database Supabase (bukan dari JWT/cache).
  */
 export async function GET() {
   try {
@@ -27,7 +26,7 @@ export async function GET() {
 
     if (dbError) {
       console.error('[API /api/user/roles GET DB ERROR]:', dbError)
-      return NextResponse.json({ error: 'Gagal membaca profil' }, { status: 500 })
+      return NextResponse.json({ error: `Gagal membaca profil: ${dbError.message}` }, { status: 500 })
     }
 
     const profileAny = profile as { role: UserRole | null; roles: UserRole[] | null } | null
@@ -47,9 +46,7 @@ export async function GET() {
 
 /**
  * POST /api/user/roles
- * Update role aktif + daftar roles user.
- * Menulis ke DB (profiles) DAN JWT metadata secara atomik.
- * Blokir assignment role admin dari self-service.
+ * Update role aktif + daftar roles user di Supabase Database & Auth Metadata.
  */
 export async function POST(request: Request) {
   try {
@@ -58,7 +55,7 @@ export async function POST(request: Request) {
 
     if (authUserError || !user) {
       console.warn('[API /api/user/roles POST] 401 Unauthorized - user session invalid:', authUserError?.message)
-      return NextResponse.json({ error: 'Tidak terotentikasi' }, { status: 401 })
+      return NextResponse.json({ error: 'Sesi habis atau tidak terotentikasi, silakan login ulang' }, { status: 401 })
     }
 
     let body: any = null
@@ -87,7 +84,7 @@ export async function POST(request: Request) {
 
     // Blokir role admin dari self-service
     if ((roles as string[]).includes('admin') || activeRole === 'admin') {
-      console.warn('[API /api/user/roles POST] 403 Forbidden - self-service admin role assignment denied for user:', user.id)
+      console.warn('[API /api/user/roles POST] 403 Forbidden - admin role self-assignment denied for user:', user.id)
       return NextResponse.json(
         { error: 'Akses ditolak. Tidak dapat memberikan peran admin melalui jalur ini.' },
         { status: 403 }
@@ -115,8 +112,7 @@ export async function POST(request: Request) {
       )
     }
 
-    // 1. Primary Strategy: Update database profiles using user's authenticated client `supabase`
-    // Using upsert ensures the record is created if missing, or updated if existing.
+    // 1. Primary Strategy: Update DB profiles via authenticated user client `supabase`
     const { data: updatedProfile, error: dbError } = await supabase
       .from('profiles')
       .upsert(
@@ -135,7 +131,7 @@ export async function POST(request: Request) {
     let finalProfile = updatedProfile
     let finalDbError = dbError
 
-    // 2. Secondary Strategy: Fallback to Admin Client if user client upsert returned error
+    // 2. Secondary Strategy: Fallback to Admin Client if user client upsert returned RLS or column error
     if (dbError) {
       try {
         const adminSupabase = createAdminSupabaseClient()
@@ -152,7 +148,7 @@ export async function POST(request: Request) {
           )
           .select('id, role, roles')
 
-        console.log('[API /api/user/roles POST] Admin Client Fallback Upsert Result:', { adminProfile, adminDbError })
+        console.log('[API /api/user/roles POST] Admin Client Fallback Result:', { adminProfile, adminDbError })
         finalProfile = adminProfile
         finalDbError = adminDbError
       } catch (adminErr) {
@@ -163,12 +159,24 @@ export async function POST(request: Request) {
     if (finalDbError) {
       console.error('[API /api/user/roles POST] DB Error Saving Role:', finalDbError)
       return NextResponse.json(
-        { error: `Gagal menyimpan profil: ${finalDbError.message}` },
+        { error: `Gagal menyimpan di database: ${finalDbError.message}` },
         { status: 500 }
       )
     }
 
-    // 3. Sync Auth Metadata
+    // 3. Best-effort sync to relational user_roles table if created in DB
+    try {
+      for (const r of validatedRoles) {
+        await supabase.from('user_roles').upsert(
+          { user_id: user.id, role: r },
+          { onConflict: 'user_id, role' }
+        )
+      }
+    } catch {
+      // Optional relational table sync
+    }
+
+    // 4. Sync Auth User Metadata
     try {
       await supabase.auth.updateUser({
         data: {
@@ -188,7 +196,7 @@ export async function POST(request: Request) {
           roles: validatedRoles,
         },
       })
-    } catch (adminAuthErr) {
+    } catch {
       // Best-effort admin sync
     }
 
