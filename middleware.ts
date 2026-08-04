@@ -70,7 +70,9 @@ export async function middleware(request: NextRequest) {
 
     const metaRole = user.user_metadata?.role as string | undefined
     const dbRole = (profile as any)?.role as string | undefined
-    const role = dbRole ?? metaRole ?? 'pembeli'
+    
+    // PRIORITAS META: metaRole (JWT) selalu lebih fresh daripada database karena baru di-refresh client.
+    const role = metaRole ?? dbRole ?? 'pembeli'
     const normalizedRole = typeof role === 'string' ? role.toLowerCase() : 'pembeli'
 
     const roleRedirects: Record<string, string> = {
@@ -111,8 +113,9 @@ export async function middleware(request: NextRequest) {
       const dbRole = (profile as any)?.role as string | undefined
       const dbRoles = (profile as any)?.roles as string[] | undefined
 
-      const activeRole = (dbRole ?? metaRole)?.trim().toLowerCase()
-      const userRolesRaw = dbRoles ?? metaRoles ?? (activeRole ? [activeRole] : [])
+      // PRIORITAS META: metaRoles (JWT) selalu lebih akurat & kebal dari DB cache
+      const activeRole = (metaRole ?? dbRole)?.trim().toLowerCase()
+      const userRolesRaw = (metaRoles && metaRoles.length > 0) ? metaRoles : (dbRoles ?? (activeRole ? [activeRole] : []))
       const userRoles: string[] = userRolesRaw.map(r => String(r).trim().toLowerCase())
 
       // Multi-role & missing profile fallback:

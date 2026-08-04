@@ -41,20 +41,20 @@ export default async function UnauthorizedPage() {
     profile = null
   }
 
-  // Fallback metadata dari authUser jika profile DB tidak ditemukan
   const metaRole = authUser?.user_metadata?.role as UserRole | undefined
   const metaRoles = authUser?.user_metadata?.roles as UserRole[] | undefined
   const metaFullName = authUser?.user_metadata?.full_name as string | undefined
 
+  // PRIORITAS META: Ambil dari metaRoles (JWT) dulu karena baru di-refresh, lalu DB
   const userRoles: UserRole[] =
-    profile?.roles && profile.roles.length > 0
-      ? profile.roles
-      : profile?.role
-        ? [profile.role]
-        : metaRoles && metaRoles.length > 0
-          ? metaRoles
-          : metaRole
-            ? [metaRole]
+    metaRoles && metaRoles.length > 0
+      ? metaRoles
+      : profile?.roles && profile.roles.length > 0
+        ? profile.roles
+        : metaRole
+          ? [metaRole]
+          : profile?.role
+            ? [profile.role]
             : []
 
   const isLoggedIn  = authUser !== null
