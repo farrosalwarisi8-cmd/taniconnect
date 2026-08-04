@@ -117,7 +117,7 @@ export function RegisterStep2({ defaultValues, onBack, onComplete, loading }: Re
           size="lg"
           loading={loading}
         >
-          Selesai & Daftar
+          Lanjut
         </Button>
       </div>
 
