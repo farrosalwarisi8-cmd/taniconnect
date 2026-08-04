@@ -62,18 +62,15 @@ export async function middleware(request: NextRequest) {
   // ─── Redirect user yang sudah login dari halaman auth ────────────
   const isAuthOnlyRoute = AUTH_ONLY_ROUTES.some(r => isPathMatch(pathname, r))
   if (user && isAuthOnlyRoute) {
+    // Baca DARI DATABASE (bukan JWT) — ini adalah source of truth
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role, roles')
+      .select('role')
       .eq('id', user.id)
       .maybeSingle()
 
-    const metaRole = user.user_metadata?.role as string | undefined
     const dbRole = (profile as any)?.role as string | undefined
-    
-    // PRIORITAS META: metaRole (JWT) selalu lebih fresh daripada database karena baru di-refresh client.
-    const role = metaRole ?? dbRole ?? 'pembeli'
-    const normalizedRole = typeof role === 'string' ? role.toLowerCase() : 'pembeli'
+    const normalizedRole = dbRole?.trim().toLowerCase() ?? 'pembeli'
 
     const roleRedirects: Record<string, string> = {
       petani: '/petani/dashboard',
@@ -102,24 +99,22 @@ export async function middleware(request: NextRequest) {
     if (matchedPrefix) {
       const allowedRoles = ROLE_REQUIRED[matchedPrefix]
 
+      // Baca DARI DATABASE — single source of truth.
+      // Tidak menggunakan user_metadata (JWT) karena bisa stale sebelum refreshSession() dipanggil.
       const { data: profile } = await supabase
         .from('profiles')
         .select('role, roles')
         .eq('id', user.id)
         .maybeSingle()
 
-      const metaRole = user.user_metadata?.role as string | undefined
-      const metaRoles = user.user_metadata?.roles as string[] | undefined
       const dbRole = (profile as any)?.role as string | undefined
       const dbRoles = (profile as any)?.roles as string[] | undefined
 
-      // PRIORITAS META: metaRoles (JWT) selalu lebih akurat & kebal dari DB cache
-      const activeRole = (metaRole ?? dbRole)?.trim().toLowerCase()
-      const userRolesRaw = (metaRoles && metaRoles.length > 0) ? metaRoles : (dbRoles ?? (activeRole ? [activeRole] : []))
+      const activeRole = dbRole?.trim().toLowerCase()
+      const userRolesRaw = dbRoles && dbRoles.length > 0 ? dbRoles : (activeRole ? [activeRole] : [])
       const userRoles: string[] = userRolesRaw.map(r => String(r).trim().toLowerCase())
 
-      // Multi-role & missing profile fallback:
-      // Jika profile belum ada untuk user non-admin, berikan default role 'pembeli'
+      // Fallback ke 'pembeli' jika user belum punya profile (misalnya baru daftar)
       const effectiveRoles = userRoles.length > 0
         ? userRoles
         : (matchedPrefix !== '/admin' ? ['pembeli'] : [])

@@ -19,14 +19,15 @@ interface ProfileData {
 }
 
 export default async function UnauthorizedPage() {
-  // ── Fetch user + profile (pola identik dengan admin/layout.tsx) ───────────
+  // ── Fetch user + profile dari DATABASE (bukan JWT) ─────────────────────────
   let profile: ProfileData | null = null
-  let authUser: any = null
+  let isLoggedIn = false
+  let displayName: string | null = null
 
   try {
     const supabase = await createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
-    authUser = user
+    isLoggedIn = user !== null
 
     if (user) {
       const { data: rawProfile, error: profileError } = await supabase
@@ -36,30 +37,21 @@ export default async function UnauthorizedPage() {
         .maybeSingle()
 
       profile = profileError ? null : (rawProfile as ProfileData | null)
+      displayName = profile?.full_name?.split(' ')[0] ?? null
     }
   } catch {
     profile = null
   }
 
-  const metaRole = authUser?.user_metadata?.role as UserRole | undefined
-  const metaRoles = authUser?.user_metadata?.roles as UserRole[] | undefined
-  const metaFullName = authUser?.user_metadata?.full_name as string | undefined
-
-  // PRIORITAS META: Ambil dari metaRoles (JWT) dulu karena baru di-refresh, lalu DB
+  // Baca DARI DATABASE saja — tidak lagi menggunakan user_metadata JWT
   const userRoles: UserRole[] =
-    metaRoles && metaRoles.length > 0
-      ? metaRoles
-      : profile?.roles && profile.roles.length > 0
-        ? profile.roles
-        : metaRole
-          ? [metaRole]
-          : profile?.role
-            ? [profile.role]
-            : []
+    profile?.roles && profile.roles.length > 0
+      ? profile.roles
+      : profile?.role
+        ? [profile.role]
+        : []
 
-  const isLoggedIn  = authUser !== null
-  const hasRoles    = userRoles.length > 0
-  const displayName = profile?.full_name?.split(' ')[0] ?? metaFullName?.split(' ')[0] ?? null
+  const hasRoles = userRoles.length > 0
 
   return (
     <main className="min-h-screen bg-surface-light flex items-center justify-center px-6 py-12">

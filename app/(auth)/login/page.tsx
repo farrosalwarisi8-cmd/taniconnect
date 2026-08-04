@@ -64,15 +64,23 @@ function RoleSelectorModal({ roles, onSelect }: RoleSelectorModalProps) {
   )
 }
 
-// Helper: update profile role tanpa TypeScript never error
-async function updateProfileRole(
-  supabase: ReturnType<typeof createClient>,
-  userId: string,
-  newRole: UserRole,
-): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase.from('profiles') as any)
-    .upsert({ id: userId, role: newRole }, { onConflict: 'id' })
+// Helper: update role aktif via API server-side (validasi admin-block + bypass RLS)
+async function updateActiveRole(
+  roles: UserRole[],
+  activeRole: UserRole,
+): Promise<{ error: string | null }> {
+  try {
+    const res = await fetch('/api/user/roles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roles, activeRole }),
+    })
+    const data = await res.json()
+    if (!res.ok) return { error: data.error ?? 'Gagal menyimpan peran' }
+    return { error: null }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) }
+  }
 }
 
 function LoginForm() {
@@ -99,14 +107,20 @@ function LoginForm() {
   const handleRoleSelect = async (selectedRole: UserRole) => {
     setShowRoleSelector(false)
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      await updateProfileRole(supabase, user.id, selectedRole)
-      await supabase.auth.updateUser({ data: { role: selectedRole } })
+    // Gunakan semua role yang user punya, hanya ubah yang aktif
+    const rolesForUpdate = availableRoles.length > 0 ? availableRoles : [selectedRole]
+
+    // Update via API (validasi admin-block + bypass RLS + sync JWT)
+    const { error } = await updateActiveRole(rolesForUpdate, selectedRole)
+    if (error) {
+      console.warn('[LOGIN] Gagal update active role:', error)
     }
 
+    // Refresh JWT agar cookie sinkron dengan DB
+    await supabase.auth.refreshSession()
+
     const destination = redirectTo
-      ? getSafeRedirectPath(redirectTo, resolveUserRoles({ dbRole: selectedRole, dbRoles: [selectedRole] }))
+      ? getSafeRedirectPath(redirectTo, resolveUserRoles({ dbRole: selectedRole, dbRoles: rolesForUpdate }))
       : ROLE_CONFIG[selectedRole]?.href ?? '/pembeli/marketplace'
     window.location.href = destination
   }

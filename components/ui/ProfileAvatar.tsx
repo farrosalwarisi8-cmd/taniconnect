@@ -5,17 +5,17 @@ import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
+import type { UserRole } from '@/lib/supabase/client'
 
 interface UserInfo {
   id: string
   fullName: string
-  dbRole: string   // role asli dari database
+  role: UserRole     // role aktif dari database
+  roles: UserRole[]  // semua role yang dimiliki user
   initial: string
 }
 
-type ActiveMode = 'petani' | 'pembeli' | 'penyedia_alat' | 'admin'
-
-const MODE_CONFIG: Record<ActiveMode, {
+const MODE_CONFIG: Record<UserRole, {
   label: string
   emoji: string
   color: string
@@ -31,7 +31,7 @@ const MODE_CONFIG: Record<ActiveMode, {
     label: 'Pembeli',
     emoji: '🛒',
     color: 'bg-blue-100 text-blue-700',
-    dashboard: '/pembeli/pesanan',
+    dashboard: '/pembeli/marketplace',
   },
   penyedia_alat: {
     label: 'Penyedia Alat',
@@ -47,8 +47,6 @@ const MODE_CONFIG: Record<ActiveMode, {
   },
 }
 
-const ALL_MODES: ActiveMode[] = ['petani', 'pembeli', 'penyedia_alat', 'admin']
-
 export function ProfileAvatar() {
   const router = useRouter()
   const supabase = createClient()
@@ -56,78 +54,113 @@ export function ProfileAvatar() {
   const [user, setUser] = useState<UserInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [activeMode, setActiveMode] = useState<ActiveMode>('pembeli')
   const [showModeSwitcher, setShowModeSwitcher] = useState(false)
+  const [switching, setSwitching] = useState(false)
 
   const pathname = usePathname()
 
-  // Sinkronisasi Active Mode berdasarkan URL (agar UI & URL tidak bentrok)
-  useEffect(() => {
-    if (!pathname) return
-    if (pathname.startsWith('/petani')) setActiveMode('petani')
-    else if (pathname.startsWith('/pembeli')) setActiveMode('pembeli')
-    else if (pathname.startsWith('/penyedia')) setActiveMode('penyedia_alat')
-    else if (pathname.startsWith('/admin')) setActiveMode('admin')
-  }, [pathname])
+  // Derive active mode dari URL path (lebih reliable daripada state)
+  const activeMode: UserRole = (() => {
+    if (pathname?.startsWith('/petani')) return 'petani'
+    if (pathname?.startsWith('/pembeli')) return 'pembeli'
+    if (pathname?.startsWith('/penyedia')) return 'penyedia_alat'
+    if (pathname?.startsWith('/admin')) return 'admin'
+    return user?.role ?? 'pembeli'
+  })()
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const { data: { user: authUser } } = await supabase.auth.getUser()
-        if (!authUser) { setUser(null); setLoading(false); return }
+  const loadUser = async () => {
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (!authUser) { setUser(null); setLoading(false); return }
 
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, role')
-          .eq('id', authUser.id)
-          .single()
+      // Selalu baca dari DB — bukan dari JWT/localStorage
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name, role, roles')
+        .eq('id', authUser.id)
+        .single()
 
-        if (profile) {
-          // Ambil meta dari jwt jika DB usang
-          const metaRole = authUser.user_metadata?.role
-          const dbRole = (profile as any).role ?? metaRole ?? 'pembeli'
-          
-          setUser({
-            id: authUser.id,
-            fullName: authUser.user_metadata?.full_name ?? (profile as any).full_name ?? 'User',
-            dbRole,
-            initial: (authUser.user_metadata?.full_name?.[0] ?? (profile as any).full_name?.[0] ?? 'U').toUpperCase(),
-          })
+      if (profile) {
+        const p = profile as { full_name: string; role: UserRole; roles: UserRole[] | null }
+        const roles: UserRole[] = p.roles && p.roles.length > 0 ? p.roles : [p.role ?? 'pembeli']
 
-          // Active mode prioritas: 1. URL path (sudah dihandle effect atas), 2. LocalStorage, 3. dbRole
-          const savedMode = localStorage.getItem('taniconnect_active_mode') as ActiveMode | null
-          if (!pathname?.match(/^\/(petani|pembeli|penyedia|admin)/)) {
-             setActiveMode(savedMode && ALL_MODES.includes(savedMode) ? savedMode : dbRole as ActiveMode)
-          }
-        }
-      } catch { setUser(null) }
-      finally { setLoading(false) }
+        setUser({
+          id: authUser.id,
+          fullName: p.full_name ?? 'User',
+          role: p.role ?? 'pembeli',
+          roles,
+          initial: (p.full_name?.[0] ?? 'U').toUpperCase(),
+        })
+      }
+    } catch {
+      setUser(null)
+    } finally {
+      setLoading(false)
     }
+  }
+
+  useEffect(() => {
     loadUser()
-  }, [supabase])
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+      loadUser()
+    })
+
+    return () => subscription.unsubscribe()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLogout = async () => {
-    localStorage.removeItem('taniconnect_active_mode')
     await supabase.auth.signOut()
     setUser(null)
     setMenuOpen(false)
     window.location.href = '/login'
   }
 
-  const switchMode = (mode: ActiveMode) => {
-    setActiveMode(mode)
-    localStorage.setItem('taniconnect_active_mode', mode)
+  /**
+   * Ganti role aktif user:
+   * 1. Panggil API server-side (bypass RLS, ada validasi admin-block)
+   * 2. Refresh JWT session agar cookie sinkron
+   * 3. Hard navigate ke dashboard role baru
+   *
+   * TIDAK menggunakan localStorage. State UI di-update dari DB setelah navigate.
+   */
+  const switchMode = async (mode: UserRole) => {
+    if (!user || switching) return
+    setSwitching(true)
     setShowModeSwitcher(false)
     setMenuOpen(false)
 
-    // Redirect ke dashboard mode yang dipilih
-    const config = MODE_CONFIG[mode]
-    window.location.href = config.dashboard
+    try {
+      const res = await fetch('/api/user/roles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roles: user.roles, // pertahankan semua role yang dimiliki
+          activeRole: mode,
+        }),
+      })
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        console.error('[PROFILE AVATAR] Gagal switch role:', errData)
+        setSwitching(false)
+        return
+      }
+
+      // Refresh JWT agar middleware dan cookie ter-update
+      await supabase.auth.refreshSession()
+
+      // Hard navigate — ini trigger middleware re-check dari DB
+      window.location.href = MODE_CONFIG[mode].dashboard
+    } catch (err) {
+      console.error('[PROFILE AVATAR] Error switch role:', err)
+      setSwitching(false)
+    }
   }
 
   const currentConfig = MODE_CONFIG[activeMode]
 
-  // Menu items berdasarkan ACTIVE MODE (bukan db role)
+  // Menu items berdasarkan ACTIVE MODE dari URL/DB (bukan localStorage)
   const getMenuItems = () => {
     if (!user) return []
 
@@ -191,6 +224,9 @@ export function ProfileAvatar() {
 
   const menuItems = getMenuItems()
 
+  // Hanya tampilkan role yang dimiliki user (dari DB), bukan semua role
+  const switchableRoles = user.roles.filter(r => r !== activeMode)
+
   return (
     <div className="relative">
       {/* Avatar + Active Mode indicator */}
@@ -237,56 +273,60 @@ export function ProfileAvatar() {
               </div>
             </div>
 
-            {/* ⭐ Mode Switcher */}
-            <div className="border-b border-gray-100">
-              <button
-                type="button"
-                onClick={() => setShowModeSwitcher(!showModeSwitcher)}
-                className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors min-h-0"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">🔄</span>
-                  <span>Ganti Mode</span>
-                </div>
-                <span className={cn('text-xs transition-transform', showModeSwitcher && 'rotate-180')}>
-                  ▼
-                </span>
-              </button>
+            {/* ⭐ Mode Switcher — hanya tampil jika user punya lebih dari 1 role */}
+            {switchableRoles.length > 0 && (
+              <div className="border-b border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowModeSwitcher(!showModeSwitcher)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors min-h-0"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🔄</span>
+                    <span>Ganti Mode</span>
+                  </div>
+                  <span className={cn('text-xs transition-transform', showModeSwitcher && 'rotate-180')}>
+                    ▼
+                  </span>
+                </button>
 
-              {/* Mode Grid (expanded) */}
-              {showModeSwitcher && (
-                <div className="px-3 pb-3 grid grid-cols-2 gap-2">
-                  {ALL_MODES.map((mode) => {
-                    const config = MODE_CONFIG[mode]
-                    const isActive = activeMode === mode
+                {/* Role Grid (hanya role yang dimiliki user) */}
+                {showModeSwitcher && (
+                  <div className="px-3 pb-3 grid grid-cols-2 gap-2">
+                    {user.roles.map((mode) => {
+                      const config = MODE_CONFIG[mode]
+                      const isActive = activeMode === mode
 
-                    return (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => switchMode(mode)}
-                        className={cn(
-                          'flex items-center gap-2 p-3 rounded-xl text-left transition-all min-h-0',
-                          isActive
-                            ? 'bg-green-50 border-2 border-green-500 shadow-sm'
-                            : 'bg-gray-50 border-2 border-transparent hover:border-gray-200 hover:bg-white'
-                        )}
-                      >
-                        <span className="text-2xl">{config.emoji}</span>
-                        <div>
-                          <p className={cn('text-xs font-bold', isActive ? 'text-green-700' : 'text-gray-700')}>
-                            {config.label}
-                          </p>
-                          {isActive && (
-                            <p className="text-[10px] text-green-600">✓ Aktif</p>
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => switchMode(mode)}
+                          disabled={switching || isActive}
+                          className={cn(
+                            'flex items-center gap-2 p-3 rounded-xl text-left transition-all min-h-0',
+                            isActive
+                              ? 'bg-green-50 border-2 border-green-500 shadow-sm cursor-default'
+                              : 'bg-gray-50 border-2 border-transparent hover:border-gray-200 hover:bg-white',
+                            switching && !isActive && 'opacity-50 cursor-wait'
                           )}
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
+                        >
+                          <span className="text-2xl">{config.emoji}</span>
+                          <div>
+                            <p className={cn('text-xs font-bold', isActive ? 'text-green-700' : 'text-gray-700')}>
+                              {config.label}
+                            </p>
+                            {isActive && (
+                              <p className="text-[10px] text-green-600">✓ Aktif</p>
+                            )}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Dashboard CTA */}
             <Link

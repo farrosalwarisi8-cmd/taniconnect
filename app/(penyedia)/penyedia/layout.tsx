@@ -12,6 +12,7 @@ export default async function PenyediaLayout({
 
   if (!user) redirect('/login?redirect=/penyedia/dashboard')
 
+  // Baca DARI DATABASE — bukan dari JWT/user_metadata yang bisa stale
   const { data: profileData } = await supabase
     .from('profiles')
     .select('role, roles, full_name')
@@ -24,12 +25,18 @@ export default async function PenyediaLayout({
     full_name: string | null
   } | null
 
-  const metaRole = user.user_metadata?.role as string | undefined
-  const metaRoles = user.user_metadata?.roles as string[] | undefined
-  const metaFullName = user.user_metadata?.full_name as string | undefined
+  // Jika profil belum ada → arahkan ke pilih peran
+  if (!profile) {
+    redirect('/pilih-peran')
+  }
 
-  const activeRole = profile?.role ?? metaRole
-  const userRoles: string[] = profile?.roles ?? metaRoles ?? (activeRole ? [activeRole] : [])
+  const activeRole = profile.role?.trim().toLowerCase()
+  const userRoles: string[] =
+    profile.roles && profile.roles.length > 0
+      ? profile.roles.map(r => r.trim().toLowerCase())
+      : activeRole
+        ? [activeRole]
+        : []
 
   const hasPenyediaAccess =
     userRoles.includes('penyedia_alat') ||
@@ -41,7 +48,7 @@ export default async function PenyediaLayout({
     redirect('/unauthorized')
   }
 
-  const providerName = profile?.full_name ?? metaFullName ?? 'Penyedia'
+  const providerName = profile.full_name ?? 'Penyedia'
 
   return (
     <div className="min-h-screen bg-surface flex flex-col lg:flex-row">

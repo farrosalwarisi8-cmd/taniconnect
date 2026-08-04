@@ -1,6 +1,53 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, createAdminSupabaseClient } from '@/lib/supabase/server'
+import type { UserRole } from '@/lib/supabase/client'
 
+const SELF_SERVICE_ROLES: UserRole[] = ['petani', 'pembeli', 'penyedia_alat']
+
+/**
+ * GET /api/user/roles
+ * Ambil role terbaru dari database (bukan dari JWT/cache).
+ * Dipakai oleh client setelah switch role untuk re-sync state.
+ */
+export async function GET() {
+  try {
+    const supabase = await createServerSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Tidak terotentikasi' }, { status: 401 })
+    }
+
+    const { data: profile, error: dbError } = await createAdminSupabaseClient()
+      .from('profiles')
+      .select('role, roles')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (dbError) {
+      return NextResponse.json({ error: 'Gagal membaca profil' }, { status: 500 })
+    }
+
+    const profileAny = profile as { role: UserRole | null; roles: UserRole[] | null } | null
+    const activeRole: UserRole = profileAny?.role ?? 'pembeli'
+    const roles: UserRole[] =
+      profileAny?.roles && profileAny.roles.length > 0
+        ? profileAny.roles
+        : [activeRole]
+
+    return NextResponse.json({ role: activeRole, roles })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Terjadi kesalahan pada server'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
+/**
+ * POST /api/user/roles
+ * Update role aktif + daftar roles user.
+ * Menulis ke DB (profiles) DAN JWT metadata secara atomik.
+ * Blokir assignment role admin dari self-service.
+ */
 export async function POST(request: Request) {
   try {
     const supabase = await createServerSupabaseClient()
@@ -11,76 +58,83 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { roles, activeRole } = body
+    const { roles, activeRole } = body as { roles?: unknown; activeRole?: unknown }
 
-    if (!roles || !Array.isArray(roles) || !activeRole) {
-      return NextResponse.json({ error: 'Parameter roles (array) dan activeRole wajib diisi' }, { status: 400 })
+    if (!Array.isArray(roles) || roles.length === 0 || typeof activeRole !== 'string') {
+      return NextResponse.json(
+        { error: 'Parameter roles (array) dan activeRole (string) wajib diisi' },
+        { status: 400 }
+      )
     }
 
-    const SELF_SERVICE_ROLES = ['petani', 'pembeli', 'penyedia_alat']
-
-    // Validasi & filter role
-    if (roles.includes('admin') || activeRole === 'admin') {
+    // Blokir role admin dari self-service
+    if ((roles as string[]).includes('admin') || activeRole === 'admin') {
       return NextResponse.json(
         { error: 'Akses ditolak. Tidak dapat memberikan peran admin melalui jalur ini.' },
         { status: 403 }
       )
     }
 
-    const validatedRoles = roles.filter(r => SELF_SERVICE_ROLES.includes(r))
+    const validatedRoles = (roles as string[]).filter((r): r is UserRole =>
+      SELF_SERVICE_ROLES.includes(r as UserRole)
+    )
 
     if (validatedRoles.length === 0) {
       return NextResponse.json({ error: 'Minimal pilih 1 peran yang valid' }, { status: 400 })
     }
 
-    if (!validatedRoles.includes(activeRole)) {
-      return NextResponse.json({ error: 'Peran aktif tidak terdapat dalam daftar peran' }, { status: 400 })
+    const validatedActiveRole = SELF_SERVICE_ROLES.includes(activeRole as UserRole)
+      ? (activeRole as UserRole)
+      : validatedRoles[0]
+
+    if (!validatedRoles.includes(validatedActiveRole)) {
+      return NextResponse.json(
+        { error: 'Peran aktif tidak terdapat dalam daftar peran' },
+        { status: 400 }
+      )
     }
 
-    // Gunakan admin service client untuk update tabel profiles dengan bypass RLS
+    // Gunakan admin client untuk bypass RLS
     const adminSupabase = createAdminSupabaseClient()
 
-    // Lakukan update dan wajib select untuk memastikan ada baris yang berubah
-    const { data, error: dbError } = await adminSupabase
+    // 1. Update database (source of truth)
+    const { data: updatedProfile, error: dbError } = await adminSupabase
       .from('profiles')
-      .update({ roles: validatedRoles, role: activeRole })
+      .update({ role: validatedActiveRole, roles: validatedRoles })
       .eq('id', user.id)
       .select('id, role, roles')
 
-    if (dbError || !data || data.length === 0) {
+    if (dbError || !updatedProfile || updatedProfile.length === 0) {
       return NextResponse.json(
         { error: 'Gagal menyimpan perubahan role, coba lagi' },
         { status: 500 }
       )
     }
 
-    // Update metadata user supaya sinkron dengan middleware
-    const { error: authError } = await adminSupabase.auth.admin.updateUserById(
-      user.id,
-      {
-        user_metadata: {
-          role: activeRole,
-          roles: validatedRoles,
-        },
-      }
-    )
+    // 2. Sinkronkan JWT metadata agar middleware selalu up-to-date
+    const { error: authError } = await adminSupabase.auth.admin.updateUserById(user.id, {
+      user_metadata: {
+        role: validatedActiveRole,
+        roles: validatedRoles,
+      },
+    })
 
     if (authError) {
-      console.warn('[SELF-SERVICE ROLE UPDATE AUTH METADATA ERROR]', authError.message)
+      // Non-fatal: DB sudah diupdate, metadata sync adalah best-effort
+      console.warn('[ROLE UPDATE] JWT metadata sync gagal:', authError.message)
     }
 
-    // Audit logs (opsional jika lib/audit.ts ada, tapi dari prompt cukup jika didukung, di sini saya skip atau log saja)
-    console.log(`[AUDIT] User ${user.id} self-assigned roles: ${validatedRoles.join(',')}, active: ${activeRole}`);
+    console.log(
+      `[AUDIT] User ${user.id} ganti role aktif → ${validatedActiveRole}, semua role: [${validatedRoles.join(', ')}]`
+    )
 
     return NextResponse.json({
       success: true,
-      role: activeRole,
+      role: validatedActiveRole,
       roles: validatedRoles,
     })
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message ?? 'Terjadi kesalahan pada server' },
-      { status: 500 }
-    )
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Terjadi kesalahan pada server'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

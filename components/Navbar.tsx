@@ -137,16 +137,34 @@ export function Navbar() {
     setSwitching(true)
     setDropdownOpen(false)
 
-    await supabase
-      .from('profiles')
-      .update({ role: newRole })
-      .eq('id', profile.id)
+    try {
+      // 1. Update ke Supabase via API server-side (dengan validasi & bypass RLS)
+      const res = await fetch('/api/user/roles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roles: profile.roles, // pertahankan semua role yang ada
+          activeRole: newRole,
+        }),
+      })
 
-    await supabase.auth.updateUser({ data: { role: newRole } })
-    setProfile(prev => prev ? { ...prev, role: newRole } : prev)
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        console.error('[SWITCH ROLE] Gagal update role:', errData)
+        setSwitching(false)
+        return
+      }
 
-    const destination = ROLE_CONFIG[newRole]?.href ?? '/'
-    window.location.href = destination
+      // 2. Refresh JWT session agar cookie sinkron dengan DB terbaru
+      await supabase.auth.refreshSession()
+
+      // 3. Hard navigate ke dashboard role baru — middleware akan re-validasi dari DB
+      const destination = ROLE_CONFIG[newRole]?.href ?? '/'
+      window.location.href = destination
+    } catch (err) {
+      console.error('[SWITCH ROLE] Error:', err)
+      setSwitching(false)
+    }
   }
 
   // Don't show on dashboard routes
