@@ -22,6 +22,8 @@ export async function POST(request: Request) {
       city,
       district,
       address,
+      roles,
+      activeRole,
     } = body
 
     const adminSupabase = createAdminSupabaseClient()
@@ -34,8 +36,8 @@ export async function POST(request: Request) {
       city: city || null,
       district: district || null,
       address: address || null,
-      role: 'pembeli',
-      roles: ['pembeli'],
+      role: activeRole || 'pembeli',
+      roles: Array.isArray(roles) && roles.length > 0 ? roles : ['pembeli'],
     }
 
     const { error } = await adminSupabase
@@ -51,8 +53,8 @@ export async function POST(request: Request) {
 
     await adminSupabase.auth.admin.updateUserById(user.id, {
       user_metadata: {
-        role: 'pembeli',
-        roles: ['pembeli'],
+        role: profileData.role,
+        roles: profileData.roles,
         full_name: profileData.full_name,
       },
     })

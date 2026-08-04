@@ -5,14 +5,22 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { RegisterStep1 } from './_components/RegisterStep1'
 import { RegisterStep2 } from './_components/RegisterStep2'
+import { RegisterRoleStep } from './_components/RegisterRoleStep'
 import { StepIndicator } from './_components/StepIndicator'
 import { ToastProvider, useToast } from '@/components/ui/Toast'
 import { createClient } from '@/lib/supabase/client'
-import type { RegisterStep1Input, RegisterStep2Input } from '@/lib/validations'
-import { normalizePhoneID } from '@/lib/utils'
+import type { RegisterStep1Input, RegisterStep2Input, RegisterStep3Input } from '@/lib/validations'
+import { normalizePhoneID, normalizeUserRole } from '@/lib/utils'
+
+const ROLE_DESTINATIONS: Record<string, string> = {
+  petani: '/petani/dashboard',
+  pembeli: '/pembeli/marketplace',
+  penyedia_alat: '/penyedia/dashboard',
+}
 
 interface RegisterState {
   step1?: RegisterStep1Input
+  step2?: RegisterStep2Input
 }
 
 function RegisterFlow() {
@@ -20,7 +28,7 @@ function RegisterFlow() {
   const { toast } = useToast()
   const supabase = createClient()
 
-  const [currentStep, setCurrentStep] = useState<1 | 2>(1)
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1)
   const [state, setState] = useState<RegisterState>({})
   const [loading, setLoading] = useState(false)
 
@@ -29,8 +37,13 @@ function RegisterFlow() {
     setCurrentStep(2)
   }
 
-  const handleStep2Complete = async (data: RegisterStep2Input) => {
-    if (!state.step1) {
+  const handleStep2Complete = (data: RegisterStep2Input) => {
+    setState(prev => ({ ...prev, step2: data }))
+    setCurrentStep(3)
+  }
+
+  const handleStep3Complete = async (data: RegisterStep3Input) => {
+    if (!state.step1 || !state.step2) {
       toast('Data tidak lengkap, silakan ulangi dari awal', 'error')
       setCurrentStep(1)
       return
@@ -50,7 +63,8 @@ function RegisterFlow() {
           data: {
             full_name: fullName,
             phone,
-            role: 'pembeli',
+            role: data.activeRole,
+            roles: data.roles,
           },
         },
       })
@@ -79,10 +93,12 @@ function RegisterFlow() {
         body: JSON.stringify({
           full_name: fullName,
           phone: phone || null,
-          province: data.province,
-          city: data.city,
-          district: data.district,
-          address: data.address,
+          province: state.step2.province,
+          city: state.step2.city,
+          district: state.step2.district,
+          address: state.step2.address,
+          roles: data.roles,
+          activeRole: data.activeRole,
         }),
       })
 
@@ -91,11 +107,18 @@ function RegisterFlow() {
         throw new Error(errData.error ?? 'Gagal setup profil')
       }
 
-      toast('Registrasi berhasil! Silakan pilih peranmu', 'success', 3000)
+      // Refresh Session agar metadata lokal terupdate langsung
+      await supabase.auth.updateUser({
+        data: { role: data.activeRole, roles: data.roles, full_name: fullName }
+      })
+      await supabase.auth.refreshSession()
 
-      // ─── 4. Redirect + Force reload supaya middleware baca session baru ─
+      toast('Registrasi berhasil! Mengalihkan ke dashboard...', 'success', 2000)
+
+      // ─── 4. Redirect langsung ke dashboard role aktif ─
       setTimeout(() => {
-        window.location.href = '/pilih-peran'
+        const dest = ROLE_DESTINATIONS[data.activeRole] || '/pembeli/marketplace'
+        window.location.href = dest
       }, 500)
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'Error tidak diketahui'
@@ -136,7 +159,7 @@ function RegisterFlow() {
       </header>
 
       <div className="px-6 py-6 border-b border-border bg-surface-light">
-        <StepIndicator currentStep={currentStep} totalSteps={2} />
+        <StepIndicator currentStep={currentStep} totalSteps={3} />
       </div>
 
       <div className="flex-1 px-6 py-8 max-w-md mx-auto w-full">
@@ -148,9 +171,15 @@ function RegisterFlow() {
         )}
         {currentStep === 2 && (
           <RegisterStep2
-            defaultValues={undefined}
+            defaultValues={state.step2}
             onBack={() => setCurrentStep(1)}
             onComplete={handleStep2Complete}
+          />
+        )}
+        {currentStep === 3 && (
+          <RegisterRoleStep
+            onBack={() => setCurrentStep(2)}
+            onComplete={handleStep3Complete}
             loading={loading}
           />
         )}

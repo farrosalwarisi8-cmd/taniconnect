@@ -38,6 +38,11 @@ export const registerStep2Schema = z.object({
   address:  z.string().min(10, 'Alamat lengkap minimal 10 karakter').max(500),
 })
 
+export const registerStep3Schema = z.object({
+  roles: z.array(z.enum(['petani', 'pembeli', 'penyedia_alat'])).min(1, 'Pilih minimal 1 peran'),
+  activeRole: z.enum(['petani', 'pembeli', 'penyedia_alat']),
+})
+
 export const loginSchema = z.object({
   email:    z.string().min(1, 'Email wajib diisi').email('Format email tidak valid'),
   password: z.string().min(1, 'Password wajib diisi'),
@@ -241,6 +246,7 @@ export const bookingPhotoUploadSchema = z.object({
 
 export type RegisterStep1Input  = z.infer<typeof registerStep1Schema>
 export type RegisterStep2Input  = z.infer<typeof registerStep2Schema>
+export type RegisterStep3Input  = z.infer<typeof registerStep3Schema>
 export type LoginInput          = z.infer<typeof loginSchema>
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>
 export type ResetPasswordInput  = z.infer<typeof resetPasswordSchema>
