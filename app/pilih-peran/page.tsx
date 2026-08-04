@@ -174,6 +174,12 @@ function PilihPeranContent() {
 
       if (profileError) throw profileError
 
+      // ── Update auth metadata (Wajib agar cookie session ter-refresh di client) ─
+      await supabase.auth.updateUser({
+        data: { role: newActiveRole, roles: rolesArray },
+      })
+      await supabase.auth.refreshSession()
+
       const roleTitles = rolesArray
         .map(r => ROLES.find(x => x.value === r)?.title ?? r)
         .join(' & ')
