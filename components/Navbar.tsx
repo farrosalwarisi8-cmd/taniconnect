@@ -6,6 +6,10 @@ import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import type { UserRole } from '@/lib/supabase/client'
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
+
+// Singleton client — satu instance, tidak dibuat ulang setiap render
+const supabase = createClient()
 
 // ─── Role config ──────────────────────────────────────────────
 const ROLE_CONFIG: Record<UserRole, {
@@ -55,7 +59,6 @@ interface UserProfile {
 export function Navbar() {
   const pathname = usePathname()
   const router = useRouter()
-  const supabase = createClient()
 
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
@@ -86,44 +89,90 @@ export function Navbar() {
   useEffect(() => { setMobileOpen(false) }, [pathname])
 
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) { setLoading(false); return }
+    let cancelled = false
 
+    const fetchProfile = async (userId: string) => {
+      try {
         const { data } = await supabase
           .from('profiles')
           .select('full_name, role, roles')
-          .eq('id', user.id)
-          .single()
+          .eq('id', userId)
+          .maybeSingle()  // tidak throw jika profil belum ada
+
+        if (cancelled) return
 
         if (data) {
-          const profileData = data as { full_name: string; role: UserRole; roles: UserRole[] | null }
+          const profileData = data as { full_name: string | null; role: UserRole | null; roles: UserRole[] | null }
           const roles = profileData.roles?.length
             ? profileData.roles
             : [profileData.role ?? 'pembeli']
 
           setProfile({
-            id: user.id,
-            full_name: profileData.full_name,
+            id: userId,
+            full_name: profileData.full_name ?? 'Pengguna',
             role: profileData.role ?? 'pembeli',
             roles: roles as UserRole[],
           })
+        } else {
+          // User auth ada tapi profil belum di DB — tampilkan minimal
+          setProfile({
+            id: userId,
+            full_name: 'Pengguna',
+            role: 'pembeli',
+            roles: ['pembeli'],
+          })
         }
       } catch {
-        // Supabase not configured — guest mode
-      } finally {
-        setLoading(false)
+        // Supabase error — tetap guest mode
+        if (!cancelled) setProfile(null)
       }
     }
 
-    fetchUser()
+    const initAuth = async () => {
+      try {
+        // 1. Baca session dari cache lokal (tidak ada network call)
+        const { data: { session } } = await supabase.auth.getSession()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      fetchUser()
-    })
+        if (cancelled) return
 
-    return () => subscription.unsubscribe()
+        if (session?.user) {
+          await fetchProfile(session.user.id)
+        } else {
+          // Tidak ada session cache — verifikasi ke server
+          const { data: { user } } = await supabase.auth.getUser()
+          if (!cancelled && user) {
+            await fetchProfile(user.id)
+          }
+        }
+      } catch {
+        // Supabase tidak dikonfigurasi — guest mode
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    initAuth()
+
+    // Subscribe ke perubahan auth state (login/logout/token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event: AuthChangeEvent, session: Session | null) => {
+        if (cancelled) return
+
+        if (session?.user) {
+          setLoading(true)
+          await fetchProfile(session.user.id)
+          if (!cancelled) setLoading(false)
+        } else {
+          setProfile(null)
+          setLoading(false)
+        }
+      }
+    )
+
+    return () => {
+      cancelled = true
+      subscription.unsubscribe()
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLogout = async () => {

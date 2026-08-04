@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { useRouter, usePathname } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import type { UserRole } from '@/lib/supabase/client'
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 
 interface UserInfo {
   id: string
@@ -47,9 +48,11 @@ const MODE_CONFIG: Record<UserRole, {
   },
 }
 
+// Singleton supabase client — satu instance per halaman, tidak di-recreate tiap render
+const supabase = createClient()
+
 export function ProfileAvatar() {
-  const router = useRouter()
-  const supabase = createClient()
+  const pathname = usePathname()
 
   const [user, setUser] = useState<UserInfo | null>(null)
   const [loading, setLoading] = useState(true)
@@ -57,9 +60,7 @@ export function ProfileAvatar() {
   const [showModeSwitcher, setShowModeSwitcher] = useState(false)
   const [switching, setSwitching] = useState(false)
 
-  const pathname = usePathname()
-
-  // Derive active mode dari URL path (lebih reliable daripada state)
+  // Derive active mode dari URL path — lebih reliable daripada state
   const activeMode: UserRole = (() => {
     if (pathname?.startsWith('/petani')) return 'petani'
     if (pathname?.startsWith('/pembeli')) return 'pembeli'
@@ -68,45 +69,95 @@ export function ProfileAvatar() {
     return user?.role ?? 'pembeli'
   })()
 
-  const loadUser = async () => {
+  const fetchProfile = async (userId: string) => {
     try {
-      const { data: { user: authUser } } = await supabase.auth.getUser()
-      if (!authUser) { setUser(null); setLoading(false); return }
-
-      // Selalu baca dari DB — bukan dari JWT/localStorage
       const { data: profile } = await supabase
         .from('profiles')
         .select('full_name, role, roles')
-        .eq('id', authUser.id)
-        .single()
+        .eq('id', userId)
+        .maybeSingle()  // maybeSingle: tidak throw jika null
 
       if (profile) {
-        const p = profile as { full_name: string; role: UserRole; roles: UserRole[] | null }
-        const roles: UserRole[] = p.roles && p.roles.length > 0 ? p.roles : [p.role ?? 'pembeli']
+        const p = profile as { full_name: string | null; role: UserRole | null; roles: UserRole[] | null }
+        const activeRole: UserRole = p.role ?? 'pembeli'
+        const roles: UserRole[] = p.roles && p.roles.length > 0 ? p.roles : [activeRole]
 
         setUser({
-          id: authUser.id,
-          fullName: p.full_name ?? 'User',
-          role: p.role ?? 'pembeli',
+          id: userId,
+          fullName: p.full_name ?? 'Pengguna',
+          role: activeRole,
           roles,
-          initial: (p.full_name?.[0] ?? 'U').toUpperCase(),
+          initial: (p.full_name?.[0] ?? 'P').toUpperCase(),
+        })
+      } else {
+        // User sudah login di Supabase Auth tapi belum punya profil di DB
+        // Tampilkan avatar minimal agar tidak kelihatan sebagai guest
+        setUser({
+          id: userId,
+          fullName: 'Pengguna',
+          role: 'pembeli',
+          roles: ['pembeli'],
+          initial: 'P',
         })
       }
     } catch {
+      // Supabase error — tetap tampilkan user sebagai null (guest)
       setUser(null)
-    } finally {
-      setLoading(false)
     }
   }
 
   useEffect(() => {
-    loadUser()
+    let cancelled = false
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      loadUser()
-    })
+    const initAuth = async () => {
+      try {
+        // 1. Coba baca session dari cache lokal terlebih dahulu (tidak ada network call)
+        const { data: { session } } = await supabase.auth.getSession()
 
-    return () => subscription.unsubscribe()
+        if (cancelled) return
+
+        if (session?.user) {
+          // Session sudah ada di cache — langsung fetch profil
+          await fetchProfile(session.user.id)
+        } else {
+          // Tidak ada session lokal — coba verifikasi ke server
+          const { data: { user: authUser } } = await supabase.auth.getUser()
+          if (!cancelled && authUser) {
+            await fetchProfile(authUser.id)
+          }
+          // Jika authUser null → user memang belum login, user state tetap null
+        }
+      } catch {
+        // Ignore auth errors (Supabase tidak dikonfigurasi, dll)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    initAuth()
+
+    // Subscribe ke perubahan auth state (login/logout/token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event: AuthChangeEvent, session: Session | null) => {
+        if (cancelled) return
+
+        if (session?.user) {
+          // Auth state berubah menjadi logged-in
+          setLoading(true)
+          await fetchProfile(session.user.id)
+          setLoading(false)
+        } else {
+          // Auth state berubah menjadi logged-out
+          setUser(null)
+          setLoading(false)
+        }
+      }
+    )
+
+    return () => {
+      cancelled = true
+      subscription.unsubscribe()
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLogout = async () => {
@@ -121,8 +172,6 @@ export function ProfileAvatar() {
    * 1. Panggil API server-side (bypass RLS, ada validasi admin-block)
    * 2. Refresh JWT session agar cookie sinkron
    * 3. Hard navigate ke dashboard role baru
-   *
-   * TIDAK menggunakan localStorage. State UI di-update dari DB setelah navigate.
    */
   const switchMode = async (mode: UserRole) => {
     if (!user || switching) return
@@ -135,7 +184,7 @@ export function ProfileAvatar() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          roles: user.roles, // pertahankan semua role yang dimiliki
+          roles: user.roles,
           activeRole: mode,
         }),
       })
@@ -150,7 +199,7 @@ export function ProfileAvatar() {
       // Refresh JWT agar middleware dan cookie ter-update
       await supabase.auth.refreshSession()
 
-      // Hard navigate — ini trigger middleware re-check dari DB
+      // Hard navigate — trigger middleware re-check dari DB
       window.location.href = MODE_CONFIG[mode].dashboard
     } catch (err) {
       console.error('[PROFILE AVATAR] Error switch role:', err)
@@ -160,7 +209,7 @@ export function ProfileAvatar() {
 
   const currentConfig = MODE_CONFIG[activeMode]
 
-  // Menu items berdasarkan ACTIVE MODE dari URL/DB (bukan localStorage)
+  // Menu items berdasarkan ACTIVE MODE dari URL/DB
   const getMenuItems = () => {
     if (!user) return []
 
@@ -223,8 +272,6 @@ export function ProfileAvatar() {
   }
 
   const menuItems = getMenuItems()
-
-  // Hanya tampilkan role yang dimiliki user (dari DB), bukan semua role
   const switchableRoles = user.roles.filter(r => r !== activeMode)
 
   return (
@@ -236,7 +283,6 @@ export function ProfileAvatar() {
         className="flex items-center gap-1.5 min-h-0 touch-target-exempt"
         aria-label="Menu profil"
       >
-        {/* Mode badge (small, di samping avatar) */}
         <span className="hidden sm:inline-flex text-xs font-semibold text-gray-500">
           {user.fullName.split(' ')[0]}
         </span>
@@ -244,7 +290,6 @@ export function ProfileAvatar() {
           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-green-500 to-emerald-700 flex items-center justify-center text-white font-bold text-sm border-2 border-white shadow-sm hover:shadow-md transition-shadow cursor-pointer">
             {user.initial}
           </div>
-          {/* Tiny mode indicator dot */}
           <div className="absolute -bottom-0.5 -right-0.5 text-[10px] leading-none">
             {currentConfig.emoji}
           </div>
@@ -273,7 +318,7 @@ export function ProfileAvatar() {
               </div>
             </div>
 
-            {/* ⭐ Mode Switcher — hanya tampil jika user punya lebih dari 1 role */}
+            {/* Mode Switcher — hanya tampil jika user punya lebih dari 1 role */}
             {switchableRoles.length > 0 && (
               <div className="border-b border-gray-100">
                 <button
@@ -290,7 +335,6 @@ export function ProfileAvatar() {
                   </span>
                 </button>
 
-                {/* Role Grid (hanya role yang dimiliki user) */}
                 {showModeSwitcher && (
                   <div className="px-3 pb-3 grid grid-cols-2 gap-2">
                     {user.roles.map((mode) => {
@@ -341,7 +385,7 @@ export function ProfileAvatar() {
 
             <div className="h-px bg-gray-100" />
 
-            {/* Menu Items (sesuai active mode) */}
+            {/* Menu Items */}
             <div className="py-1 max-h-[40vh] overflow-y-auto">
               {menuItems.map((item) => (
                 <Link
@@ -357,7 +401,6 @@ export function ProfileAvatar() {
 
               <div className="h-px bg-gray-100 my-1" />
 
-              {/* Common links */}
               {commonLinks.map((item) => (
                 <Link
                   key={item.href}
