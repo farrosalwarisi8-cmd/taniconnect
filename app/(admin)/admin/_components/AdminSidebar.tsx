@@ -9,6 +9,7 @@ import type { UserRole } from '@/lib/supabase/client'
 
 const NAV_ITEMS = [
   { href: '/admin/dashboard', icon: '📊', label: 'Dashboard' },
+  { href: '/admin/pengguna', icon: '👥', label: 'Kelola Pengguna' },
   { href: '/admin/profil', icon: '👤', label: 'Profil Saya' },
   { href: '/admin/verifikasi', icon: '🪪', label: 'Verifikasi KYC' },
   { href: '/admin/wilayah', icon: '🗺️', label: 'Data Wilayah' },

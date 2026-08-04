@@ -62,14 +62,17 @@ export async function middleware(request: NextRequest) {
   // ─── Redirect user yang sudah login dari halaman auth ────────────
   const isAuthOnlyRoute = AUTH_ONLY_ROUTES.some(r => isPathMatch(pathname, r))
   if (user && isAuthOnlyRoute) {
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, roles')
       .eq('id', user.id)
       .maybeSingle()
 
-    const role = profileError ? 'pembeli' : ((profile as any)?.role ?? 'pembeli')
+    const metaRole = user.user_metadata?.role as string | undefined
+    const dbRole = (profile as any)?.role as string | undefined
+    const role = dbRole ?? metaRole ?? 'pembeli'
     const normalizedRole = typeof role === 'string' ? role.toLowerCase() : 'pembeli'
+
     const roleRedirects: Record<string, string> = {
       petani: '/petani/dashboard',
       pembeli: '/pembeli/marketplace',
@@ -97,25 +100,27 @@ export async function middleware(request: NextRequest) {
     if (matchedPrefix) {
       const allowedRoles = ROLE_REQUIRED[matchedPrefix]
 
-      const { data: profile, error: profileError } = await supabase
+      const { data: profile } = await supabase
         .from('profiles')
         .select('role, roles')
         .eq('id', user.id)
         .maybeSingle()
 
-      const activeRole = profileError ? undefined : ((profile as any)?.role as string | undefined)
-      const normalizedActiveRole = activeRole?.trim().toLowerCase() ?? undefined
-      const rawRoles = (profile as any)?.roles as string[] | undefined
-      const userRoles: string[] = profileError
-        ? []
-        : (rawRoles ?? (normalizedActiveRole ? [normalizedActiveRole] : []))
+      const metaRole = user.user_metadata?.role as string | undefined
+      const metaRoles = user.user_metadata?.roles as string[] | undefined
+      const dbRole = (profile as any)?.role as string | undefined
+      const dbRoles = (profile as any)?.roles as string[] | undefined
+
+      const activeRole = (dbRole ?? metaRole)?.trim().toLowerCase()
+      const userRolesRaw = dbRoles ?? metaRoles ?? (activeRole ? [activeRole] : [])
+      const userRoles: string[] = userRolesRaw.map(r => String(r).trim().toLowerCase())
 
       // Multi-role & missing profile fallback:
-      // Jika profile belum ada / profileError untuk user non-admin, berikan default role 'pembeli'
+      // Jika profile belum ada untuk user non-admin, berikan default role 'pembeli'
       const effectiveRoles = userRoles.length > 0
         ? userRoles
         : (matchedPrefix !== '/admin' ? ['pembeli'] : [])
-      const effectiveActiveRole = normalizedActiveRole ?? (matchedPrefix !== '/admin' ? 'pembeli' : undefined)
+      const effectiveActiveRole = activeRole ?? (matchedPrefix !== '/admin' ? 'pembeli' : undefined)
 
       const hasAccess =
         (effectiveActiveRole && allowedRoles.includes(effectiveActiveRole)) ||

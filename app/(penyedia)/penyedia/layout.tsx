@@ -12,7 +12,7 @@ export default async function PenyediaLayout({
 
   if (!user) redirect('/login?redirect=/penyedia/dashboard')
 
-  const { data: profileData, error: profileError } = await supabase
+  const { data: profileData } = await supabase
     .from('profiles')
     .select('role, roles, full_name')
     .eq('id', user.id)
@@ -21,27 +21,32 @@ export default async function PenyediaLayout({
   const profile = profileData as {
     role: string | null
     roles: string[] | null
-    full_name: string
+    full_name: string | null
   } | null
 
-  if (profileError || !profile) {
-    redirect('/unauthorized')
-  }
+  const metaRole = user.user_metadata?.role as string | undefined
+  const metaRoles = user.user_metadata?.roles as string[] | undefined
+  const metaFullName = user.user_metadata?.full_name as string | undefined
 
-  // Support multi-role: cek apakah user punya role penyedia_alat di roles array ATAU role aktif
-  const userRoles: string[] = profile.roles ?? (profile.role ? [profile.role] : [])
+  const activeRole = profile?.role ?? metaRole
+  const userRoles: string[] = profile?.roles ?? metaRoles ?? (activeRole ? [activeRole] : [])
+
   const hasPenyediaAccess =
     userRoles.includes('penyedia_alat') ||
-    profile.role === 'penyedia_alat'
+    activeRole === 'penyedia_alat' ||
+    userRoles.includes('admin') ||
+    activeRole === 'admin'
 
   if (!hasPenyediaAccess) {
     redirect('/unauthorized')
   }
 
+  const providerName = profile?.full_name ?? metaFullName ?? 'Penyedia'
+
   return (
     <div className="min-h-screen bg-surface flex flex-col lg:flex-row">
       {/* Sidebar */}
-      <PenyediaSidebar providerName={profile.full_name} userRoles={userRoles} />
+      <PenyediaSidebar providerName={providerName} userRoles={userRoles} />
 
       {/* Main content */}
       <main className="flex-1 lg:ml-64 min-w-0">

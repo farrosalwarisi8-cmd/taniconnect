@@ -12,15 +12,11 @@ export default async function AdminLayout({
 
   if (!user) redirect('/login?redirect=/admin/dashboard')
 
-  const { data: profileData, error: profileError } = await supabase
+  const { data: profileData } = await supabase
     .from('profiles')
     .select('role, roles, full_name')
     .eq('id', user.id)
     .maybeSingle()
-
-  if (profileError) {
-    throw new Error(profileError.message)
-  }
 
   const profile = profileData as {
     role: string | null
@@ -28,23 +24,26 @@ export default async function AdminLayout({
     full_name: string | null
   } | null
 
-  if (!profile) {
-    redirect('/unauthorized')
-  }
+  const metaRole = user.user_metadata?.role as string | undefined
+  const metaRoles = user.user_metadata?.roles as string[] | undefined
+  const metaFullName = user.user_metadata?.full_name as string | undefined
 
-  // Hanya role 'admin' yang boleh akses panel admin — tidak boleh di-bypass
-  const userRoles: string[] = profile.roles ?? (profile.role ? [profile.role] : [])
+  const activeRole = profile?.role ?? metaRole
+  const userRoles: string[] = profile?.roles ?? metaRoles ?? (activeRole ? [activeRole] : [])
+
   const hasAdminAccess =
     userRoles.includes('admin') ||
-    profile.role === 'admin'
+    activeRole === 'admin'
 
   if (!hasAdminAccess) {
     redirect('/unauthorized')
   }
 
+  const adminName = profile?.full_name ?? metaFullName ?? 'Administrator'
+
   return (
     <div className="min-h-screen bg-surface flex flex-col lg:flex-row">
-      <AdminSidebar adminName={profile.full_name ?? 'Administrator'} userRoles={userRoles} />
+      <AdminSidebar adminName={adminName} userRoles={userRoles} />
       <main className="flex-1 lg:ml-64 min-w-0">
         {children}
       </main>

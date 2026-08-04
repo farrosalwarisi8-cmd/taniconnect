@@ -21,10 +21,12 @@ interface ProfileData {
 export default async function UnauthorizedPage() {
   // ── Fetch user + profile (pola identik dengan admin/layout.tsx) ───────────
   let profile: ProfileData | null = null
+  let authUser: any = null
 
   try {
     const supabase = await createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
+    authUser = user
 
     if (user) {
       const { data: rawProfile, error: profileError } = await supabase
@@ -36,22 +38,28 @@ export default async function UnauthorizedPage() {
       profile = profileError ? null : (rawProfile as ProfileData | null)
     }
   } catch {
-    // Kalau fetch gagal (env tidak diset, network error, dsb),
-    // fallback ke tampilan tidak-login — tidak crash halaman.
     profile = null
   }
 
-  // Normalisasi roles — support user lama yang belum punya kolom roles
+  // Fallback metadata dari authUser jika profile DB tidak ditemukan
+  const metaRole = authUser?.user_metadata?.role as UserRole | undefined
+  const metaRoles = authUser?.user_metadata?.roles as UserRole[] | undefined
+  const metaFullName = authUser?.user_metadata?.full_name as string | undefined
+
   const userRoles: UserRole[] =
     profile?.roles && profile.roles.length > 0
       ? profile.roles
       : profile?.role
         ? [profile.role]
-        : []
+        : metaRoles && metaRoles.length > 0
+          ? metaRoles
+          : metaRole
+            ? [metaRole]
+            : []
 
-  const isLoggedIn  = profile !== null
+  const isLoggedIn  = authUser !== null
   const hasRoles    = userRoles.length > 0
-  const displayName = profile?.full_name?.split(' ')[0] ?? null
+  const displayName = profile?.full_name?.split(' ')[0] ?? metaFullName?.split(' ')[0] ?? null
 
   return (
     <main className="min-h-screen bg-surface-light flex items-center justify-center px-6 py-12">
