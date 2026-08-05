@@ -220,9 +220,6 @@ export function Navbar() {
   if (isDashboardRoute) return null
 
   const activeRoleConfig = profile ? ROLE_CONFIG[profile.role] : null
-  const otherRoles = profile
-    ? profile.roles.filter(r => r !== profile.role)
-    : []
 
   return (
     <>
@@ -358,74 +355,57 @@ export function Navbar() {
                         </Link>
                       </div>
 
-                      {/* Switch role — if user has other roles */}
-                      {otherRoles.length > 0 && (
+                      {/* Ganti Role — show ALL roles with checkmark on active */}
+                      {profile.roles.length > 1 && (
                         <div className="p-2 border-b border-border/50">
                           <p className="text-[10px] font-semibold text-fg/40 uppercase tracking-wider px-3 mb-1.5">
-                            Ganti Peran
+                            Ganti Role
                           </p>
-                          {otherRoles.map(role => {
+                          {profile.roles.map(role => {
                             const rc = ROLE_CONFIG[role]
+                            const isActive = role === profile.role
                             return (
                               <button
                                 key={role}
                                 type="button"
-                                onClick={() => handleSwitchRole(role)}
-                                disabled={switching}
-                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface transition-colors min-h-0 text-left"
+                                onClick={() => !isActive && handleSwitchRole(role)}
+                                disabled={switching || isActive}
+                                className={cn(
+                                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors min-h-0 text-left',
+                                  isActive
+                                    ? 'bg-primary/5 cursor-default'
+                                    : 'hover:bg-surface cursor-pointer',
+                                )}
                               >
                                 <div className={cn(
                                   'w-8 h-8 rounded-lg flex items-center justify-center text-sm border',
-                                  rc?.bg ?? 'bg-gray-50 border-gray-200'
+                                  isActive
+                                    ? `bg-gradient-to-br ${rc?.gradient ?? 'from-gray-400 to-gray-600'} text-white border-transparent shadow-sm`
+                                    : rc?.bg ?? 'bg-gray-50 border-gray-200'
                                 )}>
                                   {rc?.emoji}
                                 </div>
-                                <div>
-                                  <p className="text-sm font-medium text-fg-dark">
+                                <div className="flex-1 min-w-0">
+                                  <p className={cn(
+                                    'text-sm font-medium',
+                                    isActive ? 'text-fg-dark font-semibold' : 'text-fg-dark',
+                                  )}>
                                     {rc?.label}
                                   </p>
-                                  <p className="text-xs text-fg/50">Masuk sebagai {rc?.label}</p>
+                                  {isActive && (
+                                    <p className="text-[11px] text-primary-dark font-medium">Role aktif saat ini</p>
+                                  )}
                                 </div>
-                                {switching && (
+                                {isActive ? (
+                                  <span className="ml-auto text-primary-dark font-bold text-base">✓</span>
+                                ) : switching ? (
                                   <div className="ml-auto w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                                )}
+                                ) : null}
                               </button>
                             )
                           })}
                         </div>
                       )}
-
-                      {/* Manage roles */}
-                      <div className="p-2 border-b border-border/50">
-                        <Link
-                          href="/pilih-peran"
-                          onClick={() => setDropdownOpen(false)}
-                          className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface transition-colors min-h-0"
-                        >
-                          <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-sm">
-                            ⚙️
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-fg-dark">Kelola Peran</p>
-                            <p className="text-xs text-fg/50">Tambah atau ubah peran</p>
-                          </div>
-                        </Link>
-                      </div>
-
-                      {/* Quick links */}
-                      <div className="p-2 border-b border-border/50">
-                        {PUBLIC_LINKS.map(link => (
-                          <Link
-                            key={link.href}
-                            href={link.href}
-                            onClick={() => setDropdownOpen(false)}
-                            className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-surface transition-colors min-h-0 text-sm text-fg/70"
-                          >
-                            <span>{link.emoji}</span>
-                            <span>{link.label}</span>
-                          </Link>
-                        ))}
-                      </div>
 
                       {/* Logout */}
                       <div className="p-2">
@@ -549,24 +529,37 @@ export function Navbar() {
                     📊 Dashboard Saya
                   </Link>
 
-                  {otherRoles.map(role => (
-                    <button
-                      key={role}
-                      type="button"
-                      onClick={() => { setMobileOpen(false); handleSwitchRole(role) }}
-                      className="w-full flex items-center gap-3 px-4 py-3 rounded-btn hover:bg-surface text-sm text-fg min-h-0 text-left"
-                    >
-                      {ROLE_CONFIG[role]?.emoji} Ganti ke {ROLE_CONFIG[role]?.label}
-                    </button>
-                  ))}
-
-                  <Link
-                    href="/pilih-peran"
-                    onClick={() => setMobileOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 rounded-btn hover:bg-surface text-sm text-fg/70 min-h-0"
-                  >
-                    ⚙️ Kelola Peran
-                  </Link>
+                  {/* Ganti Role — all roles with checkmark */}
+                  {profile.roles.length > 1 && (
+                    <div className="pt-2 pb-1">
+                      <p className="text-[10px] font-semibold text-fg/40 uppercase tracking-wider px-4 mb-1">
+                        Ganti Role
+                      </p>
+                      {profile.roles.map(role => {
+                        const rc = ROLE_CONFIG[role]
+                        const isActive = role === profile.role
+                        return (
+                          <button
+                            key={role}
+                            type="button"
+                            onClick={() => { if (!isActive) { setMobileOpen(false); handleSwitchRole(role) } }}
+                            disabled={switching || isActive}
+                            className={cn(
+                              'w-full flex items-center gap-3 px-4 py-3 rounded-btn text-sm min-h-0 text-left transition-colors',
+                              isActive ? 'bg-primary/5' : 'hover:bg-surface',
+                            )}
+                          >
+                            <span>{rc?.emoji}</span>
+                            <span className={isActive ? 'font-semibold text-fg-dark' : 'text-fg'}>{rc?.label}</span>
+                            {isActive && <span className="ml-auto text-primary-dark font-bold">✓</span>}
+                            {!isActive && switching && (
+                              <div className="ml-auto w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
 
                   <button
                     type="button"

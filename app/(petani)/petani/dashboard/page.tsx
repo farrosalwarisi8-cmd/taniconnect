@@ -108,6 +108,14 @@ export default async function PetaniDashboardPage() {
       featured: false,
     },
     {
+      href: '/petani/pengiriman',
+      icon: '🚚',
+      label: 'Pengiriman',
+      desc: 'Kelola jasa kirim',
+      gradient: null,
+      featured: false,
+    },
+    {
       href: '/pembeli/marketplace',
       icon: '🛒',
       label: 'Marketplace',

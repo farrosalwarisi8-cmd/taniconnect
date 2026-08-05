@@ -37,6 +37,16 @@ type ProductWithSeller = {
   seller: SellerData | SellerData[] | null
 }
 
+type ShippingServiceRow = {
+  id: string
+  service_name: string
+  description: string | null
+  price_per_km: number
+  minimum_cost: number
+  estimated_delivery: string
+  is_active: boolean
+}
+
 export default async function ProductDetailPage({ params }: Props) {
   const { id } = await params
   const supabase = await createServerSupabaseClient()
@@ -60,6 +70,16 @@ export default async function ProductDetailPage({ params }: Props) {
 
   const seller = Array.isArray(product.seller) ? product.seller[0] : product.seller
 
+  // Fetch seller's active shipping services
+  const { data: shippingData } = await supabase
+    .from('shipping_services')
+    .select('id, service_name, description, price_per_km, minimum_cost, estimated_delivery, is_active')
+    .eq('owner_id', product.seller_id)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+
+  const shippingServices = (shippingData as ShippingServiceRow[] | null) ?? []
+
   const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
   const images = (product.image_paths || []).map((p: string) =>
     p.startsWith('http')
@@ -70,6 +90,7 @@ export default async function ProductDetailPage({ params }: Props) {
   const ratingAvg = seller?.rating_avg ?? 0
   const ratingCount = seller?.rating_count ?? 0
   const inStock = product.stock_quantity > 0
+  const sellerName = getDisplayName(seller?.full_name, 'Penjual')
 
   return (
     <main className="min-h-screen bg-[#f5f5f5] pb-24 lg:pb-8">
@@ -169,18 +190,57 @@ export default async function ProductDetailPage({ params }: Props) {
                 )}
               </div>
 
-              {/* Pengiriman — Shopee style */}
+              {/* Pengiriman — Seller's own shipping services */}
               <div className="flex items-start gap-4 mb-6">
                 <span className="text-sm text-gray-500 w-24 shrink-0 pt-1">Pengiriman</span>
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-green-600 text-lg">🚚</span>
-                    <span className="text-sm text-gray-800">Dikirim dari <b>{product.city || 'Lokasi Petani'}</b></span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-400 w-6 text-center">Ongkir</span>
-                    <span className="text-sm text-gray-800">Mulai dari Rp10.000 (Reguler)</span>
-                  </div>
+                <div className="flex-1">
+                  {shippingServices.length > 0 ? (
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-green-600 text-lg">🚚</span>
+                        <span className="text-sm text-gray-800">
+                          Pengiriman oleh <b>{sellerName}</b>
+                        </span>
+                      </div>
+                      {shippingServices.map(svc => (
+                        <div
+                          key={svc.id}
+                          className="bg-green-50/60 border border-green-100 rounded-lg p-3"
+                        >
+                          <p className="text-sm font-semibold text-gray-900 mb-1">
+                            {svc.service_name}
+                          </p>
+                          <div className="grid grid-cols-3 gap-2 text-xs">
+                            <div>
+                              <span className="text-gray-500">Harga/KM</span>
+                              <p className="font-semibold text-green-700">
+                                {formatRupiah(svc.price_per_km)}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Minimum</span>
+                              <p className="font-semibold text-amber-700">
+                                {formatRupiah(svc.minimum_cost)}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Estimasi</span>
+                              <p className="font-semibold text-gray-800">
+                                {svc.estimated_delivery}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400 text-lg">🚚</span>
+                      <span className="text-sm text-gray-500">
+                        Dikirim dari <b>{product.city || 'Lokasi Penjual'}</b> — hubungi penjual untuk info pengiriman
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -193,6 +253,14 @@ export default async function ProductDetailPage({ params }: Props) {
                 maxQuantity={product.stock_quantity}
                 isAuction={product.is_auction}
                 currentBid={product.current_bid}
+                sellerName={sellerName}
+                shippingServices={shippingServices.map(s => ({
+                  id: s.id,
+                  service_name: s.service_name,
+                  price_per_km: s.price_per_km,
+                  minimum_cost: s.minimum_cost,
+                  estimated_delivery: s.estimated_delivery,
+                }))}
               />
             </div>
           </div>

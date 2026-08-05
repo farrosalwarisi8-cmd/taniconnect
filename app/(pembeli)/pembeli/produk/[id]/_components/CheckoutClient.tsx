@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ToastProvider, useToast } from '@/components/ui/Toast'
-import { formatRupiah, generateIdempotencyKey, getDisplayName } from '@/lib/utils'
+import { formatRupiah, generateIdempotencyKey } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
+import { cn } from '@/lib/utils'
 
 declare global {
   interface Window {
@@ -19,6 +20,14 @@ declare global {
   }
 }
 
+interface ShippingService {
+  id: string
+  service_name: string
+  price_per_km: number
+  minimum_cost: number
+  estimated_delivery: string
+}
+
 interface Props {
   productId:    string
   productName:  string
@@ -27,15 +36,9 @@ interface Props {
   maxQuantity:  number
   isAuction:    boolean
   currentBid:   number | null
+  sellerName?:  string
+  shippingServices: ShippingService[]
 }
-
-type ShippingMethod = 'jne' | 'sicepat' | 'ambil_sendiri'
-
-const SHIPPING_OPTIONS: Array<{ value: ShippingMethod; label: string; cost: number; desc: string }> = [
-  { value: 'jne',           label: 'JNE Reguler',   cost: 15000, desc: '2-4 hari kerja' },
-  { value: 'sicepat',       label: 'SiCepat REG',   cost: 12000, desc: '2-3 hari kerja' },
-  { value: 'ambil_sendiri', label: 'Ambil Sendiri', cost: 0,     desc: 'Gratis ongkir' },
-]
 
 function CheckoutFlow(props: Props) {
   const router = useRouter()
@@ -43,7 +46,10 @@ function CheckoutFlow(props: Props) {
   const supabase = createClient()
 
   const [quantity, setQuantity] = useState(1)
-  const [shipping, setShipping] = useState<ShippingMethod>('jne')
+  const [selectedServiceId, setSelectedServiceId] = useState<string>(
+    props.shippingServices[0]?.id ?? ''
+  )
+  const [distanceKm, setDistanceKm] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [snapReady, setSnapReady] = useState(false)
   const [user, setUser] = useState<{ id: string } | null>(null)
@@ -76,10 +82,18 @@ function CheckoutFlow(props: Props) {
     }
   }, [supabase, toast])
 
-  const shippingCost = SHIPPING_OPTIONS.find(o => o.value === shipping)?.cost ?? 0
+  // Calculate shipping cost
+  const selectedService = props.shippingServices.find(s => s.id === selectedServiceId)
+  const distance = Number(distanceKm) || 0
+  const calculatedShipping = selectedService
+    ? Math.max(distance * selectedService.price_per_km, selectedService.minimum_cost)
+    : 0
+  const shippingCost = distance > 0 ? calculatedShipping : 0
+
   const subtotal = props.pricePerUnit * quantity
   const total    = subtotal + shippingCost
   const outOfStock = props.maxQuantity < 1
+  const hasShipping = props.shippingServices.length > 0
 
   const handleCheckout = async () => {
     if (!user) {
@@ -90,6 +104,16 @@ function CheckoutFlow(props: Props) {
 
     if (quantity > props.maxQuantity) {
       toast(`Stok maksimal ${props.maxQuantity} ${props.unit}`, 'warning')
+      return
+    }
+
+    if (hasShipping && !selectedServiceId) {
+      toast('Pilih layanan pengiriman terlebih dahulu', 'warning')
+      return
+    }
+
+    if (hasShipping && distance <= 0) {
+      toast('Masukkan estimasi jarak pengiriman (KM)', 'warning')
       return
     }
 
@@ -109,10 +133,11 @@ function CheckoutFlow(props: Props) {
           'x-idempotency-key': idempotencyKey,
         },
         body: JSON.stringify({
-          product_id:      props.productId,
+          product_id:          props.productId,
           quantity,
-          shipping_method: shipping,
-          shipping_cost:   shippingCost,
+          shipping_service_id: selectedServiceId || undefined,
+          shipping_cost:       shippingCost,
+          distance_km:         distance || undefined,
         }),
       })
 
@@ -183,40 +208,98 @@ function CheckoutFlow(props: Props) {
         </span>
       </div>
 
-      {/* Pengiriman */}
-      <div className="flex items-start gap-4 mb-5">
-        <span className="text-sm text-gray-500 w-24 shrink-0 pt-1">Pengiriman</span>
-        <div className="flex-1 space-y-2">
-          {SHIPPING_OPTIONS.map(opt => (
-            <label
-              key={opt.value}
-              className={`flex items-center justify-between p-3 rounded-sm border cursor-pointer transition-all min-h-0 ${
-                shipping === opt.value
-                  ? 'border-[#ee4d2d] bg-orange-50'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
+      {/* Pengiriman — Seller's shipping services */}
+      {hasShipping ? (
+        <div className="flex items-start gap-4 mb-5">
+          <span className="text-sm text-gray-500 w-24 shrink-0 pt-1">Pengiriman</span>
+          <div className="flex-1 space-y-3">
+            {/* Shipping service selection */}
+            <div className="space-y-2">
+              {props.shippingServices.map(svc => (
+                <label
+                  key={svc.id}
+                  className={cn(
+                    'flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all min-h-0',
+                    selectedServiceId === svc.id
+                      ? 'border-green-500 bg-green-50/60 shadow-sm'
+                      : 'border-gray-200 hover:border-gray-300',
+                  )}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <input
+                      type="radio"
+                      name="shipping_service"
+                      value={svc.id}
+                      checked={selectedServiceId === svc.id}
+                      onChange={() => setSelectedServiceId(svc.id)}
+                      className="accent-green-600 min-h-0"
+                    />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-gray-800">🚚 {svc.service_name}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
+                        <span>Rp {formatRupiah(svc.price_per_km, false)}/KM</span>
+                        <span>•</span>
+                        <span>Min. {formatRupiah(svc.minimum_cost)}</span>
+                        <span>•</span>
+                        <span>⏱️ {svc.estimated_delivery}</span>
+                      </div>
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            {/* Distance input */}
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                📍 Estimasi Jarak dari Penjual (KM)
+              </label>
               <div className="flex items-center gap-2">
                 <input
-                  type="radio"
-                  name="shipping"
-                  value={opt.value}
-                  checked={shipping === opt.value}
-                  onChange={e => setShipping(e.target.value as ShippingMethod)}
-                  className="accent-[#ee4d2d] min-h-0"
+                  type="number"
+                  value={distanceKm}
+                  onChange={(e) => setDistanceKm(e.target.value)}
+                  placeholder="Masukkan jarak dalam KM"
+                  min="0.1"
+                  step="0.1"
+                  className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-400"
                 />
-                <div>
-                  <div className="text-sm font-medium text-gray-800">{opt.label}</div>
-                  <div className="text-xs text-gray-400">{opt.desc}</div>
+                <span className="text-sm text-gray-400 font-medium">KM</span>
+              </div>
+
+              {/* Ongkir calculation preview */}
+              {distance > 0 && selectedService && (
+                <div className="mt-2.5 pt-2.5 border-t border-gray-200">
+                  <div className="flex items-center justify-between text-xs text-gray-600">
+                    <span>
+                      {distance} KM × {formatRupiah(selectedService.price_per_km)} = {formatRupiah(distance * selectedService.price_per_km)}
+                    </span>
+                  </div>
+                  {distance * selectedService.price_per_km < selectedService.minimum_cost && (
+                    <p className="text-[11px] text-amber-600 mt-1">
+                      ⚠️ Di bawah biaya minimum → dibulatkan ke {formatRupiah(selectedService.minimum_cost)}
+                    </p>
+                  )}
+                  <p className="text-sm font-bold text-green-700 mt-1">
+                    Ongkir: {formatRupiah(shippingCost)}
+                  </p>
                 </div>
-              </div>
-              <div className="text-sm font-medium text-[#ee4d2d]">
-                {opt.cost === 0 ? 'Gratis' : formatRupiah(opt.cost)}
-              </div>
-            </label>
-          ))}
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex items-start gap-4 mb-5">
+          <span className="text-sm text-gray-500 w-24 shrink-0 pt-1">Pengiriman</span>
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex-1">
+            <p className="text-sm text-gray-500">
+              🚚 Hubungi penjual untuk mengatur pengiriman
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Ringkasan harga */}
       <div className="border-t border-gray-100 pt-4 mb-4 space-y-2">
@@ -226,7 +309,7 @@ function CheckoutFlow(props: Props) {
         </div>
         <div className="flex justify-between text-sm text-gray-600">
           <span>Ongkos Kirim</span>
-          <span>{shippingCost === 0 ? 'Gratis' : formatRupiah(shippingCost)}</span>
+          <span>{shippingCost === 0 ? (hasShipping ? 'Masukkan jarak' : 'Gratis') : formatRupiah(shippingCost)}</span>
         </div>
         <div className="flex justify-between items-baseline pt-2 border-t border-gray-100">
           <span className="text-base text-gray-800">Total Pembayaran</span>
@@ -264,13 +347,13 @@ function CheckoutFlow(props: Props) {
       {/* Mobile sticky bottom bar — ala Shopee */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.08)]">
         <div className="flex items-center px-3 py-2 gap-2">
-          <Link
+          <MobileLink
             href="/pembeli/marketplace"
             className="flex flex-col items-center justify-center w-12 text-[10px] text-gray-500 min-h-0"
           >
             <span className="text-lg">🏠</span>
             Beranda
-          </Link>
+          </MobileLink>
           <div className="flex-1 flex gap-2">
             <button
               type="button"
@@ -295,7 +378,7 @@ function CheckoutFlow(props: Props) {
   )
 }
 
-function Link({ href, className, children }: { href: string; className?: string; children: React.ReactNode }) {
+function MobileLink({ href, className, children }: { href: string; className?: string; children: React.ReactNode }) {
   const router = useRouter()
   return (
     <a

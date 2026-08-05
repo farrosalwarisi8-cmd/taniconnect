@@ -11,13 +11,15 @@ const NAV_ITEMS = [
   { href: '/penyedia/dashboard', icon: '📊', label: 'Dashboard'     },
   { href: '/penyedia/alat',      icon: '🚜', label: 'Alat Saya'     },
   { href: '/penyedia/booking',   icon: '📥', label: 'Booking Masuk' },
+  { href: '/penyedia/pengiriman', icon: '🚚', label: 'Pengiriman'   },
   { href: '/penyedia/profil',    icon: '👤', label: 'Profil'        },
 ]
 
-const OTHER_ROLE_CONFIG: Record<string, { emoji: string; label: string; href: string; color: string }> = {
-  petani:  { emoji: '🌾', label: 'Mode Petani',   href: '/petani/dashboard',    color: 'text-green-700'  },
-  pembeli: { emoji: '🛒', label: 'Mode Pembeli',  href: '/pembeli/marketplace', color: 'text-amber-700'  },
-  admin:   { emoji: '🔐', label: 'Mode Admin',    href: '/admin/dashboard',     color: 'text-purple-700' },
+const ALL_ROLE_CONFIG: Record<string, { emoji: string; label: string; href: string; color: string; gradient: string }> = {
+  petani:        { emoji: '🌾', label: 'Petani',         href: '/petani/dashboard',    color: 'text-green-700',  gradient: 'from-green-500 to-emerald-600' },
+  pembeli:       { emoji: '🛒', label: 'Pembeli',        href: '/pembeli/marketplace', color: 'text-amber-700',  gradient: 'from-amber-400 to-orange-500'  },
+  penyedia_alat: { emoji: '🚜', label: 'Penyedia Alat',  href: '/penyedia/dashboard',  color: 'text-blue-700',   gradient: 'from-blue-500 to-cyan-600'     },
+  admin:         { emoji: '🔐', label: 'Administrator',  href: '/admin/dashboard',     color: 'text-purple-700', gradient: 'from-purple-600 to-violet-700' },
 }
 
 interface Props {
@@ -50,11 +52,11 @@ export function PenyediaSidebar({ providerName, userRoles = [] }: Props) {
         // ignore and still redirect
       }
     }
-    const dest = OTHER_ROLE_CONFIG[newRole]?.href ?? '/'
+    const dest = ALL_ROLE_CONFIG[newRole]?.href ?? '/'
     window.location.href = dest
   }
 
-  const otherRoles = userRoles.filter(r => r !== 'penyedia_alat' && r in OTHER_ROLE_CONFIG)
+  const otherRoles = userRoles.filter(r => r !== 'penyedia_alat')
 
   const SidebarContent = () => (
     <aside
@@ -147,31 +149,34 @@ export function PenyediaSidebar({ providerName, userRoles = [] }: Props) {
           <span>Tanya AI</span>
         </Link>
 
-        {/* Switch role section */}
-        {otherRoles.length > 0 && (
+        {/* Switch role section — show all roles with checkmark */}
+        {userRoles.length > 1 && (
           <>
             <div className="pt-2 pb-1">
               <p className="text-[10px] font-semibold text-fg/40 uppercase tracking-wider px-3">
-                Ganti Peran
+                Ganti Role
               </p>
             </div>
-            {otherRoles.map(role => {
-              const rc = OTHER_ROLE_CONFIG[role]
+            {userRoles.map(role => {
+              const rc = ALL_ROLE_CONFIG[role]
               if (!rc) return null
+              const isActive = role === 'penyedia_alat'
               return (
                 <button
                   key={role}
                   type="button"
-                  onClick={() => { setMobileOpen(false); handleSwitchRole(role as UserRole) }}
-                  disabled={switching}
+                  onClick={() => { if (!isActive) { setMobileOpen(false); handleSwitchRole(role as UserRole) } }}
+                  disabled={switching || isActive}
                   className={cn(
-                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface text-sm min-h-0 text-left transition-colors',
+                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm min-h-0 text-left transition-colors',
+                    isActive ? 'bg-blue-50/50 cursor-default' : 'hover:bg-surface cursor-pointer',
                     rc.color
                   )}
                 >
                   <span>{rc.emoji}</span>
-                  <span>{rc.label}</span>
-                  {switching && <div className="ml-auto w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />}
+                  <span className={isActive ? 'font-semibold' : ''}>{rc.label}</span>
+                  {isActive && <span className="ml-auto text-blue-600 font-bold">✓</span>}
+                  {!isActive && switching && <div className="ml-auto w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />}
                 </button>
               )
             })}

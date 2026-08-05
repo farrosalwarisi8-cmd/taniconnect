@@ -320,6 +320,32 @@ export type Database = {
         }
         Update: Partial<Database['public']['Tables']['rental_bookings']['Insert']>
       }
+      shipping_services: {
+        Row: {
+          id: string
+          created_at: string
+          updated_at: string
+          owner_id: string
+          owner_role: 'petani' | 'penyedia_alat'
+          service_name: string
+          description: string | null
+          price_per_km: number
+          minimum_cost: number
+          estimated_delivery: string
+          is_active: boolean
+        }
+        Insert: {
+          owner_id: string
+          owner_role: 'petani' | 'penyedia_alat'
+          service_name: string
+          description?: string | null
+          price_per_km: number
+          minimum_cost?: number
+          estimated_delivery?: string
+          is_active?: boolean
+        }
+        Update: Partial<Database['public']['Tables']['shipping_services']['Insert']>
+      }
     }
     Views: Record<string, never>
     Functions: Record<string, never>

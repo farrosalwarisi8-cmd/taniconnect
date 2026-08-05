@@ -181,10 +181,11 @@ export const equipmentImageUploadSchema = z.object({
 // ─── TRANSACTION ──────────────────────────────────────────────
 
 export const createTransactionSchema = z.object({
-  product_id:      z.string().uuid('ID produk tidak valid'),
-  quantity:        z.number().positive('Jumlah harus lebih dari 0'),
-  shipping_method: z.enum(['jne', 'sicepat', 'ambil_sendiri']),
-  shipping_cost:   z.number().nonnegative(),
+  product_id:         z.string().uuid('ID produk tidak valid'),
+  quantity:           z.number().positive('Jumlah harus lebih dari 0'),
+  shipping_service_id: z.string().uuid('Layanan pengiriman tidak valid'),
+  shipping_cost:      z.number().nonnegative(),
+  distance_km:        z.number().positive('Jarak harus lebih dari 0').optional(),
   shipping_address: z.object({
     recipient_name: z.string().min(3),
     phone:          z.string(),
@@ -195,6 +196,20 @@ export const createTransactionSchema = z.object({
     postal_code:    z.string().optional(),
   }).optional(),
   notes: z.string().max(500).optional(),
+})
+
+// ─── SHIPPING SERVICE ─────────────────────────────────────────
+
+export const shippingServiceCreateSchema = z.object({
+  service_name:       z.string().min(3, 'Nama layanan minimal 3 karakter').max(120, 'Nama layanan maksimal 120 karakter'),
+  description:        z.string().max(500, 'Deskripsi maksimal 500 karakter').optional().or(z.literal('')),
+  price_per_km:       z.number({ message: 'Harga per KM harus diisi' }).positive('Harga per KM harus lebih dari 0').max(999_999, 'Harga per KM terlalu besar'),
+  minimum_cost:       z.number({ message: 'Biaya minimum harus diisi' }).nonnegative('Biaya minimum tidak boleh negatif').max(9_999_999, 'Biaya minimum terlalu besar'),
+  estimated_delivery: z.string().min(1, 'Estimasi pengiriman wajib diisi').max(50, 'Estimasi terlalu panjang'),
+})
+
+export const shippingServiceUpdateSchema = shippingServiceCreateSchema.partial().extend({
+  is_active: z.boolean().optional(),
 })
 
 // ─── FINANCIAL RECORD ─────────────────────────────────────────
@@ -257,3 +272,5 @@ export type EquipmentFormInput  = z.infer<typeof equipmentFormSchema>
 export type CreateTransactionInput = z.infer<typeof createTransactionSchema>
 export type FinancialRecordInput   = z.infer<typeof financialRecordSchema>
 export type BookingReturnInput     = z.infer<typeof bookingReturnSchema>
+export type ShippingServiceCreateInput = z.infer<typeof shippingServiceCreateSchema>
+export type ShippingServiceUpdateInput = z.infer<typeof shippingServiceUpdateSchema>
