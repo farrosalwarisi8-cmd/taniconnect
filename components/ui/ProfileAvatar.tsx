@@ -75,7 +75,7 @@ export function ProfileAvatar() {
         .from('profiles')
         .select('full_name, role, roles')
         .eq('id', userId)
-        .maybeSingle()  // maybeSingle: tidak throw jika null
+        .maybeSingle()
 
       if (profile) {
         const p = profile as { full_name: string | null; role: UserRole | null; roles: UserRole[] | null }
@@ -90,8 +90,6 @@ export function ProfileAvatar() {
           initial: (p.full_name?.[0] ?? 'P').toUpperCase(),
         })
       } else {
-        // User sudah login di Supabase Auth tapi belum punya profil di DB
-        // Tampilkan avatar minimal agar tidak kelihatan sebagai guest
         setUser({
           id: userId,
           fullName: 'Pengguna',
@@ -101,7 +99,6 @@ export function ProfileAvatar() {
         })
       }
     } catch {
-      // Supabase error — tetap tampilkan user sebagai null (guest)
       setUser(null)
     }
   }
@@ -111,24 +108,20 @@ export function ProfileAvatar() {
 
     const initAuth = async () => {
       try {
-        // 1. Coba baca session dari cache lokal terlebih dahulu (tidak ada network call)
         const { data: { session } } = await supabase.auth.getSession()
 
         if (cancelled) return
 
         if (session?.user) {
-          // Session sudah ada di cache — langsung fetch profil
           await fetchProfile(session.user.id)
         } else {
-          // Tidak ada session lokal — coba verifikasi ke server
           const { data: { user: authUser } } = await supabase.auth.getUser()
           if (!cancelled && authUser) {
             await fetchProfile(authUser.id)
           }
-          // Jika authUser null → user memang belum login, user state tetap null
         }
       } catch {
-        // Ignore auth errors (Supabase tidak dikonfigurasi, dll)
+        // Ignore auth errors
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -136,18 +129,15 @@ export function ProfileAvatar() {
 
     initAuth()
 
-    // Subscribe ke perubahan auth state (login/logout/token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event: AuthChangeEvent, session: Session | null) => {
         if (cancelled) return
 
         if (session?.user) {
-          // Auth state berubah menjadi logged-in
           setLoading(true)
           await fetchProfile(session.user.id)
           setLoading(false)
         } else {
-          // Auth state berubah menjadi logged-out
           setUser(null)
           setLoading(false)
         }
@@ -196,10 +186,7 @@ export function ProfileAvatar() {
         return
       }
 
-      // Refresh JWT agar middleware dan cookie ter-update
       await supabase.auth.refreshSession()
-
-      // Hard navigate — trigger middleware re-check dari DB
       window.location.href = MODE_CONFIG[mode].dashboard
     } catch (err) {
       console.error('[PROFILE AVATAR] Error switch role:', err)
@@ -209,7 +196,6 @@ export function ProfileAvatar() {
 
   const currentConfig = MODE_CONFIG[activeMode]
 
-  // Menu items berdasarkan ACTIVE MODE dari URL/DB
   const getMenuItems = () => {
     if (!user) return []
 
@@ -248,7 +234,6 @@ export function ProfileAvatar() {
     }
   }
 
-  // Common links (tampil di semua mode)
   const commonLinks = [
     { href: '/tanya-ai', icon: '🤖', label: 'Tanya AI' },
     { href: '/prediksi-harga', icon: '🔮', label: 'Prediksi Harga' },
@@ -371,6 +356,25 @@ export function ProfileAvatar() {
                 )}
               </div>
             )}
+
+            {/* ── PENAMBAHAN: Kelola Role (selalu tampil, tidak bersyarat) ─────
+                Link ke /pilih-peran supaya user bisa tambah/hapus role.
+                Beda dari "Ganti Mode" di atas yang cuma switch antar role
+                yang SUDAH dimiliki. Ini untuk user yang mau nambah role baru
+                (misal user Pembeli yang mau jadi Petani juga). */}
+            <Link
+              href="/pilih-peran"
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors min-h-0 border-b border-gray-100"
+            >
+              <span className="text-lg">🎭</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold">Kelola Role</p>
+                <p className="text-[11px] text-gray-500">Tambah atau ubah role kamu</p>
+              </div>
+              <span className="text-gray-400">→</span>
+            </Link>
+            {/* ── AKHIR PENAMBAHAN ───────────────────────────────────────────── */}
 
             {/* Dashboard CTA */}
             <Link
