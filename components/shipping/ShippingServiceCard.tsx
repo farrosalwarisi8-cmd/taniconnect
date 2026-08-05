@@ -10,6 +10,7 @@ interface ShippingServiceData {
   minimum_cost: number
   estimated_delivery: string
   is_active: boolean
+  max_coverage_km?: number
   created_at: string
 }
 
@@ -66,34 +67,44 @@ export function ShippingServiceCard({ service, onEdit, onToggle, onDelete, isDel
       </div>
 
       {/* Info grid */}
-      <div className="px-5 pb-4 grid grid-cols-3 gap-3">
-        <div className="bg-blue-50/60 rounded-xl p-3">
-          <div className="flex items-center gap-1.5 mb-1">
+      <div className="px-5 pb-4 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="bg-blue-50/60 rounded-xl p-2.5">
+          <div className="flex items-center gap-1 mb-1">
             <span className="text-blue-500 text-xs">💰</span>
             <span className="text-[10px] font-semibold text-blue-600 uppercase tracking-wide">Harga/KM</span>
           </div>
-          <p className="text-[15px] font-bold text-blue-800">
+          <p className="text-[14px] font-bold text-blue-800">
             Rp {formatRupiah(service.price_per_km)}
           </p>
         </div>
 
-        <div className="bg-amber-50/60 rounded-xl p-3">
-          <div className="flex items-center gap-1.5 mb-1">
+        <div className="bg-amber-50/60 rounded-xl p-2.5">
+          <div className="flex items-center gap-1 mb-1">
             <span className="text-amber-500 text-xs">📍</span>
             <span className="text-[10px] font-semibold text-amber-600 uppercase tracking-wide">Minimum</span>
           </div>
-          <p className="text-[15px] font-bold text-amber-800">
+          <p className="text-[14px] font-bold text-amber-800">
             Rp {formatRupiah(service.minimum_cost)}
           </p>
         </div>
 
-        <div className="bg-purple-50/60 rounded-xl p-3">
-          <div className="flex items-center gap-1.5 mb-1">
+        <div className="bg-purple-50/60 rounded-xl p-2.5">
+          <div className="flex items-center gap-1 mb-1">
             <span className="text-purple-500 text-xs">⏱️</span>
             <span className="text-[10px] font-semibold text-purple-600 uppercase tracking-wide">Estimasi</span>
           </div>
-          <p className="text-[14px] font-bold text-purple-800">
+          <p className="text-[13px] font-bold text-purple-800 truncate">
             {service.estimated_delivery}
+          </p>
+        </div>
+
+        <div className="bg-emerald-50/60 rounded-xl p-2.5">
+          <div className="flex items-center gap-1 mb-1">
+            <span className="text-emerald-500 text-xs">🗺️</span>
+            <span className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wide">Jangkauan</span>
+          </div>
+          <p className="text-[14px] font-bold text-emerald-800">
+            Maks {service.max_coverage_km ?? 50} KM
           </p>
         </div>
       </div>

@@ -45,6 +45,7 @@ type ShippingServiceRow = {
   minimum_cost: number
   estimated_delivery: string
   is_active: boolean
+  max_coverage_km?: number
 }
 
 export default async function ProductDetailPage({ params }: Props) {
@@ -73,7 +74,7 @@ export default async function ProductDetailPage({ params }: Props) {
   // Fetch seller's active shipping services
   const { data: shippingData } = await supabase
     .from('shipping_services')
-    .select('id, service_name, description, price_per_km, minimum_cost, estimated_delivery, is_active')
+    .select('id, service_name, description, price_per_km, minimum_cost, estimated_delivery, is_active, max_coverage_km')
     .eq('owner_id', product.seller_id)
     .eq('is_active', true)
     .order('created_at', { ascending: false })
@@ -91,6 +92,7 @@ export default async function ProductDetailPage({ params }: Props) {
   const ratingCount = seller?.rating_count ?? 0
   const inStock = product.stock_quantity > 0
   const sellerName = getDisplayName(seller?.full_name, 'Penjual')
+  const sellerCity = seller?.city || product.city || ''
 
   return (
     <main className="min-h-screen bg-[#f5f5f5] pb-24 lg:pb-8">
@@ -210,7 +212,7 @@ export default async function ProductDetailPage({ params }: Props) {
                           <p className="text-sm font-semibold text-gray-900 mb-1">
                             {svc.service_name}
                           </p>
-                          <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div className="grid grid-cols-4 gap-2 text-xs">
                             <div>
                               <span className="text-gray-500">Harga/KM</span>
                               <p className="font-semibold text-green-700">
@@ -227,6 +229,12 @@ export default async function ProductDetailPage({ params }: Props) {
                               <span className="text-gray-500">Estimasi</span>
                               <p className="font-semibold text-gray-800">
                                 {svc.estimated_delivery}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Jangkauan</span>
+                              <p className="font-semibold text-blue-700">
+                                Maks {svc.max_coverage_km ?? 50} KM
                               </p>
                             </div>
                           </div>
@@ -254,12 +262,14 @@ export default async function ProductDetailPage({ params }: Props) {
                 isAuction={product.is_auction}
                 currentBid={product.current_bid}
                 sellerName={sellerName}
+                sellerCity={sellerCity}
                 shippingServices={shippingServices.map(s => ({
                   id: s.id,
                   service_name: s.service_name,
                   price_per_km: s.price_per_km,
                   minimum_cost: s.minimum_cost,
                   estimated_delivery: s.estimated_delivery,
+                  max_coverage_km: s.max_coverage_km ?? 50,
                 }))}
               />
             </div>

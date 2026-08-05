@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ToastProvider, useToast } from '@/components/ui/Toast'
-import { formatRupiah, generateIdempotencyKey } from '@/lib/utils'
+import { formatRupiah, generateIdempotencyKey, cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
-import { cn } from '@/lib/utils'
+import { estimateDistanceBetweenCities } from '@/lib/geo-distance'
 
 declare global {
   interface Window {
@@ -26,6 +26,7 @@ interface ShippingService {
   price_per_km: number
   minimum_cost: number
   estimated_delivery: string
+  max_coverage_km?: number
 }
 
 interface Props {
@@ -37,6 +38,7 @@ interface Props {
   isAuction:    boolean
   currentBid:   number | null
   sellerName?:  string
+  sellerCity?:  string
   shippingServices: ShippingService[]
 }
 
@@ -50,6 +52,8 @@ function CheckoutFlow(props: Props) {
     props.shippingServices[0]?.id ?? ''
   )
   const [distanceKm, setDistanceKm] = useState<string>('')
+  const [buyerCityInput, setBuyerCityInput] = useState<string>('')
+  const [calculatingGeo, setCalculatingGeo] = useState(false)
   const [loading, setLoading] = useState(false)
   const [snapReady, setSnapReady] = useState(false)
   const [user, setUser] = useState<{ id: string } | null>(null)
@@ -57,7 +61,24 @@ function CheckoutFlow(props: Props) {
   useEffect(() => {
     const loadUser = async () => {
       const { data } = await supabase.auth.getUser()
-      setUser(data.user ? { id: data.user.id } : null)
+      if (data.user) {
+        setUser({ id: data.user.id })
+        // Fetch buyer city from profile if available
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('city')
+          .eq('id', data.user.id)
+          .maybeSingle()
+        if (profile?.city) {
+          setBuyerCityInput(profile.city)
+          if (props.sellerCity) {
+            const estimated = estimateDistanceBetweenCities(props.sellerCity, profile.city)
+            if (estimated !== null) {
+              setDistanceKm(String(estimated))
+            }
+          }
+        }
+      }
     }
     loadUser()
 
@@ -80,15 +101,40 @@ function CheckoutFlow(props: Props) {
       }
       document.body.appendChild(script)
     }
-  }, [supabase, toast])
+  }, [supabase, toast, props.sellerCity])
 
-  // Calculate shipping cost
+  const handleAutoEstimateDistance = () => {
+    if (!props.sellerCity) {
+      toast('Lokasi penjual belum dikonfigurasi', 'info')
+      return
+    }
+    if (!buyerCityInput.trim()) {
+      toast('Masukkan nama kota Anda terlebih dahulu', 'warning')
+      return
+    }
+
+    setCalculatingGeo(true)
+    const estimated = estimateDistanceBetweenCities(props.sellerCity, buyerCityInput)
+    setCalculatingGeo(false)
+
+    if (estimated !== null) {
+      setDistanceKm(String(estimated))
+      toast(`Estimasi jarak dari ${props.sellerCity} ke ${buyerCityInput}: ${estimated} KM`, 'info')
+    } else {
+      toast(`Tidak dapat memperkirakan jarak ${props.sellerCity} - ${buyerCityInput}. Silakan masukkan jarak manual.`, 'warning')
+    }
+  }
+
+  // Calculate shipping cost & coverage check
   const selectedService = props.shippingServices.find(s => s.id === selectedServiceId)
   const distance = Number(distanceKm) || 0
+  const maxCoverage = selectedService?.max_coverage_km ?? 50
+  const isOverCoverage = distance > maxCoverage
+
   const calculatedShipping = selectedService
     ? Math.max(distance * selectedService.price_per_km, selectedService.minimum_cost)
     : 0
-  const shippingCost = distance > 0 ? calculatedShipping : 0
+  const shippingCost = distance > 0 && !isOverCoverage ? calculatedShipping : 0
 
   const subtotal = props.pricePerUnit * quantity
   const total    = subtotal + shippingCost
@@ -114,6 +160,11 @@ function CheckoutFlow(props: Props) {
 
     if (hasShipping && distance <= 0) {
       toast('Masukkan estimasi jarak pengiriman (KM)', 'warning')
+      return
+    }
+
+    if (hasShipping && isOverCoverage) {
+      toast(`Jarak pengiriman (${distance} KM) melebihi jangkauan maksimum penjual (${maxCoverage} KM)`, 'error')
       return
     }
 
@@ -238,12 +289,14 @@ function CheckoutFlow(props: Props) {
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-gray-800">🚚 {svc.service_name}</span>
                       </div>
-                      <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
+                      <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5 flex-wrap">
                         <span>Rp {formatRupiah(svc.price_per_km, false)}/KM</span>
                         <span>•</span>
                         <span>Min. {formatRupiah(svc.minimum_cost)}</span>
                         <span>•</span>
                         <span>⏱️ {svc.estimated_delivery}</span>
+                        <span>•</span>
+                        <span className="font-semibold text-blue-600">🗺️ Maks {svc.max_coverage_km ?? 50} KM</span>
                       </div>
                     </div>
                   </div>
@@ -251,26 +304,66 @@ function CheckoutFlow(props: Props) {
               ))}
             </div>
 
-            {/* Distance input */}
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                📍 Estimasi Jarak dari Penjual (KM)
-              </label>
+            {/* Distance input with auto-calculator */}
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-gray-600">
+                  📍 Estimasi Jarak dari Penjual (KM)
+                </label>
+                {props.sellerCity && (
+                  <span className="text-[11px] text-gray-400">
+                    Asal: <b>{props.sellerCity}</b>
+                  </span>
+                )}
+              </div>
+
+              {/* City auto-calculator input row */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={buyerCityInput}
+                  onChange={(e) => setBuyerCityInput(e.target.value)}
+                  placeholder="Kota tujuan Anda (misal: Bogor, Bandung)"
+                  className="flex-1 px-3 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-green-500/20"
+                />
+                <button
+                  type="button"
+                  onClick={handleAutoEstimateDistance}
+                  disabled={calculatingGeo}
+                  className="px-2.5 py-1.5 bg-green-100 hover:bg-green-200 text-green-800 text-xs font-semibold rounded-md transition-colors shrink-0"
+                >
+                  ⚡ hitung Jarak
+                </button>
+              </div>
+
               <div className="flex items-center gap-2">
                 <input
                   type="number"
                   value={distanceKm}
                   onChange={(e) => setDistanceKm(e.target.value)}
-                  placeholder="Masukkan jarak dalam KM"
+                  placeholder="Atau masukkan KM manual"
                   min="0.1"
                   step="0.1"
-                  className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-400"
+                  className={cn(
+                    'flex-1 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20',
+                    isOverCoverage ? 'border-red-400 bg-red-50 text-red-700' : 'border-gray-200 focus:border-green-400',
+                  )}
                 />
                 <span className="text-sm text-gray-400 font-medium">KM</span>
               </div>
 
+              {/* Coverage warning */}
+              {isOverCoverage && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-2 flex items-center gap-2">
+                  <span className="text-red-500 text-sm">⚠️</span>
+                  <p className="text-xs text-red-600 font-medium">
+                    Jarak pengiriman ({distance} KM) melebihi jangkauan maksimum penjual ({maxCoverage} KM).
+                  </p>
+                </div>
+              )}
+
               {/* Ongkir calculation preview */}
-              {distance > 0 && selectedService && (
+              {distance > 0 && !isOverCoverage && selectedService && (
                 <div className="mt-2.5 pt-2.5 border-t border-gray-200">
                   <div className="flex items-center justify-between text-xs text-gray-600">
                     <span>

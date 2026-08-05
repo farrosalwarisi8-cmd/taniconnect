@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { shippingServiceUpdateSchema } from '@/lib/validations'
+import { clearCacheKey } from '@/lib/cache'
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -87,6 +88,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     if (parsed.data.minimum_cost !== undefined) updateData.minimum_cost = parsed.data.minimum_cost
     if (parsed.data.estimated_delivery !== undefined) updateData.estimated_delivery = parsed.data.estimated_delivery
     if (parsed.data.is_active !== undefined) updateData.is_active = parsed.data.is_active
+    if (parsed.data.max_coverage_km !== undefined) updateData.max_coverage_km = parsed.data.max_coverage_km
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: 'Tidak ada data yang diubah' }, { status: 400 })
@@ -103,6 +105,8 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       console.error('[API /api/shipping-services PATCH] DB Error:', dbError)
       return NextResponse.json({ error: `Gagal memperbarui: ${dbError.message}` }, { status: 500 })
     }
+
+    clearCacheKey('shipping_services')
 
     return NextResponse.json({ data: updated })
   } catch (err: unknown) {
@@ -150,6 +154,8 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       console.error('[API /api/shipping-services DELETE] DB Error:', dbError)
       return NextResponse.json({ error: `Gagal menghapus: ${dbError.message}` }, { status: 500 })
     }
+
+    clearCacheKey('shipping_services')
 
     return NextResponse.json({ success: true })
   } catch (err: unknown) {

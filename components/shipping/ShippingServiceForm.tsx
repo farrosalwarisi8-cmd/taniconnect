@@ -9,6 +9,7 @@ interface FormData {
   price_per_km: string
   minimum_cost: string
   estimated_delivery: string
+  max_coverage_km: string
 }
 
 interface ShippingServiceData {
@@ -19,6 +20,7 @@ interface ShippingServiceData {
   minimum_cost: number
   estimated_delivery: string
   is_active: boolean
+  max_coverage_km?: number
 }
 
 interface Props {
@@ -35,6 +37,7 @@ const INITIAL_FORM: FormData = {
   price_per_km: '',
   minimum_cost: '',
   estimated_delivery: '1-2 hari',
+  max_coverage_km: '50',
 }
 
 export function ShippingServiceForm({ isOpen, onClose, onSuccess, editData, toast }: Props) {
@@ -52,6 +55,7 @@ export function ShippingServiceForm({ isOpen, onClose, onSuccess, editData, toas
         price_per_km: String(editData.price_per_km),
         minimum_cost: String(editData.minimum_cost),
         estimated_delivery: editData.estimated_delivery,
+        max_coverage_km: String(editData.max_coverage_km ?? 50),
       })
     } else {
       setForm(INITIAL_FORM)
@@ -76,6 +80,10 @@ export function ShippingServiceForm({ isOpen, onClose, onSuccess, editData, toas
     if (!form.estimated_delivery.trim()) {
       newErrors.estimated_delivery = 'Estimasi pengiriman wajib diisi'
     }
+    const maxCov = Number(form.max_coverage_km)
+    if (!form.max_coverage_km || isNaN(maxCov) || maxCov <= 0) {
+      newErrors.max_coverage_km = 'Jangkauan harus > 0 KM'
+    }
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -93,6 +101,7 @@ export function ShippingServiceForm({ isOpen, onClose, onSuccess, editData, toas
         price_per_km: Number(form.price_per_km),
         minimum_cost: Number(form.minimum_cost),
         estimated_delivery: form.estimated_delivery.trim(),
+        max_coverage_km: Number(form.max_coverage_km),
       }
 
       const url = isEdit
@@ -254,24 +263,49 @@ export function ShippingServiceForm({ isOpen, onClose, onSuccess, editData, toas
               </div>
             </div>
 
-            {/* Estimated delivery */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                ⏱️ Estimasi Pengiriman
-              </label>
-              <input
-                type="text"
-                value={form.estimated_delivery}
-                onChange={(e) => setForm({ ...form, estimated_delivery: e.target.value })}
-                placeholder="contoh: 1-2 hari"
-                className={cn(
-                  'w-full px-4 py-3 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-green-500/20',
-                  errors.estimated_delivery ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50 focus:border-green-400',
+            {/* Estimated delivery & Max coverage */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  ⏱️ Estimasi Pengiriman
+                </label>
+                <input
+                  type="text"
+                  value={form.estimated_delivery}
+                  onChange={(e) => setForm({ ...form, estimated_delivery: e.target.value })}
+                  placeholder="contoh: 1-2 hari"
+                  className={cn(
+                    'w-full px-4 py-3 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-green-500/20',
+                    errors.estimated_delivery ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50 focus:border-green-400',
+                  )}
+                />
+                {errors.estimated_delivery && (
+                  <p className="text-xs text-red-500 mt-1">{errors.estimated_delivery}</p>
                 )}
-              />
-              {errors.estimated_delivery && (
-                <p className="text-xs text-red-500 mt-1">{errors.estimated_delivery}</p>
-              )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  🗺️ Jangkauan Maks (KM)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={form.max_coverage_km}
+                    onChange={(e) => setForm({ ...form, max_coverage_km: e.target.value })}
+                    placeholder="50"
+                    min="1"
+                    className={cn(
+                      'w-full pr-12 pl-4 py-3 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-green-500/20',
+                      errors.max_coverage_km ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50 focus:border-green-400',
+                    )}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-semibold">KM</span>
+                </div>
+                {errors.max_coverage_km && (
+                  <p className="text-xs text-red-500 mt-1">{errors.max_coverage_km}</p>
+                )}
+              </div>
             </div>
 
             {/* Info box */}

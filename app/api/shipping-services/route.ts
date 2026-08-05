@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { shippingServiceCreateSchema } from '@/lib/validations'
 
+import { getCache, setCache, clearCacheKey } from '@/lib/cache'
+
 const SELLER_ROLES = ['petani', 'penyedia_alat']
 
 /**
@@ -10,6 +12,12 @@ const SELLER_ROLES = ['petani', 'penyedia_alat']
  */
 export async function GET() {
   try {
+    const cacheKey = 'shipping_services_all_active'
+    const cached = getCache<unknown[]>(cacheKey)
+    if (cached) {
+      return NextResponse.json({ data: cached })
+    }
+
     const supabase = await createServerSupabaseClient()
 
     const { data, error } = await supabase
@@ -22,6 +30,8 @@ export async function GET() {
       console.error('[API /api/shipping-services GET] DB Error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+
+    setCache(cacheKey, data ?? [], 15_000)
 
     return NextResponse.json({ data: data ?? [] })
   } catch (err: unknown) {
@@ -95,6 +105,7 @@ export async function POST(request: Request) {
         price_per_km: parsed.data.price_per_km,
         minimum_cost: parsed.data.minimum_cost,
         estimated_delivery: parsed.data.estimated_delivery,
+        max_coverage_km: parsed.data.max_coverage_km ?? 50,
       })
       .select()
       .single()
@@ -103,6 +114,8 @@ export async function POST(request: Request) {
       console.error('[API /api/shipping-services POST] DB Error:', dbError)
       return NextResponse.json({ error: `Gagal menyimpan: ${dbError.message}` }, { status: 500 })
     }
+
+    clearCacheKey('shipping_services')
 
     return NextResponse.json({ data: created }, { status: 201 })
   } catch (err: unknown) {

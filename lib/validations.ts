@@ -206,10 +206,16 @@ export const shippingServiceCreateSchema = z.object({
   price_per_km:       z.number({ message: 'Harga per KM harus diisi' }).positive('Harga per KM harus lebih dari 0').max(999_999, 'Harga per KM terlalu besar'),
   minimum_cost:       z.number({ message: 'Biaya minimum harus diisi' }).nonnegative('Biaya minimum tidak boleh negatif').max(9_999_999, 'Biaya minimum terlalu besar'),
   estimated_delivery: z.string().min(1, 'Estimasi pengiriman wajib diisi').max(50, 'Estimasi terlalu panjang'),
+  max_coverage_km:    z.number({ message: 'Jangkauan maksimum harus diisi' }).positive('Jangkauan maksimum harus > 0 KM').max(10_000, 'Jangkauan maksimum terlalu besar').optional().default(50),
 })
 
 export const shippingServiceUpdateSchema = shippingServiceCreateSchema.partial().extend({
   is_active: z.boolean().optional(),
+})
+
+export const shipmentTrackingSchema = z.object({
+  status:         z.enum(['diproses', 'diambil', 'dalam_perjalanan', 'terkirim'], { message: 'Status pengiriman tidak valid' }),
+  location_notes: z.string().min(3, 'Catatan lokasi/posisi minimal 3 karakter').max(300, 'Catatan lokasi maksimal 300 karakter'),
 })
 
 // ─── FINANCIAL RECORD ─────────────────────────────────────────
@@ -274,3 +280,4 @@ export type FinancialRecordInput   = z.infer<typeof financialRecordSchema>
 export type BookingReturnInput     = z.infer<typeof bookingReturnSchema>
 export type ShippingServiceCreateInput = z.infer<typeof shippingServiceCreateSchema>
 export type ShippingServiceUpdateInput = z.infer<typeof shippingServiceUpdateSchema>
+export type ShipmentTrackingInput       = z.infer<typeof shipmentTrackingSchema>

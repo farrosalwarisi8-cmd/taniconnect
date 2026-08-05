@@ -333,6 +333,7 @@ export type Database = {
           minimum_cost: number
           estimated_delivery: string
           is_active: boolean
+          max_coverage_km: number
         }
         Insert: {
           owner_id: string
@@ -343,8 +344,26 @@ export type Database = {
           minimum_cost?: number
           estimated_delivery?: string
           is_active?: boolean
+          max_coverage_km?: number
         }
         Update: Partial<Database['public']['Tables']['shipping_services']['Insert']>
+      }
+      shipment_tracking: {
+        Row: {
+          id: string
+          transaction_id: string
+          status: 'diproses' | 'diambil' | 'dalam_perjalanan' | 'terkirim'
+          location_notes: string
+          updated_by: string | null
+          created_at: string
+        }
+        Insert: {
+          transaction_id: string
+          status: 'diproses' | 'diambil' | 'dalam_perjalanan' | 'terkirim'
+          location_notes: string
+          updated_by?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['shipment_tracking']['Insert']>
       }
     }
     Views: Record<string, never>
