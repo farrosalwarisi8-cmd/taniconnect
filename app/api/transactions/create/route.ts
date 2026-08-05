@@ -7,10 +7,12 @@ import { z } from 'zod'
 import type { Tables, TablesInsert } from '@/lib/supabase/client'
 
 const bodySchema = z.object({
-  product_id:      z.string().uuid(),
-  quantity:        z.number().positive(),
-  shipping_method: z.enum(['jne', 'sicepat', 'ambil_sendiri']),
-  shipping_cost:   z.number().nonnegative(),
+  product_id:          z.string().uuid(),
+  quantity:            z.number().positive(),
+  shipping_service_id: z.string().uuid().optional().nullable(),
+  shipping_method:     z.string().optional().nullable(),
+  shipping_cost:       z.number().nonnegative(),
+  distance_km:         z.number().positive().optional().nullable(),
 })
 
 export async function POST(req: NextRequest) {
@@ -110,9 +112,31 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ─── 6. HITUNG HARGA (server-side!) ───────────────────────
+    // ─── 6. HITUNG ONGKIR & TOTAL (server-side validation) ────
+    let validatedShippingCost = parsed.data.shipping_cost
+    let shippingMethodName = parsed.data.shipping_method ?? 'Pengiriman Penjual'
+
+    if (parsed.data.shipping_service_id) {
+      const { data: serviceData } = await admin
+        .from('shipping_services')
+        .select('id, service_name, price_per_km, minimum_cost')
+        .eq('id', parsed.data.shipping_service_id)
+        .maybeSingle()
+
+      if (serviceData) {
+        const service = serviceData as { id: string; service_name: string; price_per_km: number; minimum_cost: number }
+        shippingMethodName = service.service_name
+        const distance = parsed.data.distance_km ?? 0
+        if (distance > 0) {
+          validatedShippingCost = Math.max(distance * Number(service.price_per_km), Number(service.minimum_cost))
+        } else {
+          validatedShippingCost = Number(service.minimum_cost)
+        }
+      }
+    }
+
     const subtotal = product.price_per_unit * parsed.data.quantity
-    const totalAmount = subtotal + parsed.data.shipping_cost
+    const totalAmount = subtotal + validatedShippingCost
 
     const hasMidtransConfig = Boolean(
       process.env.MIDTRANS_SERVER_KEY && process.env.MIDTRANS_CLIENT_KEY
@@ -133,9 +157,9 @@ export async function POST(req: NextRequest) {
       quantity:         parsed.data.quantity,
       price_per_unit:   product.price_per_unit,
       subtotal,
-      shipping_cost:    parsed.data.shipping_cost,
+      shipping_cost:    validatedShippingCost,
       total_amount:     totalAmount,
-      shipping_method:  parsed.data.shipping_method,
+      shipping_method:  shippingMethodName,
       status:           'pending',
       escrow_status:    'held',
       idempotency_key:  idempotencyKey,
@@ -172,10 +196,10 @@ export async function POST(req: NextRequest) {
           price:    product.price_per_unit,
           quantity: parsed.data.quantity,
         },
-        ...(parsed.data.shipping_cost > 0 ? [{
+        ...(validatedShippingCost > 0 ? [{
           id:       'shipping',
           name:     'Ongkos Kirim',
-          price:    parsed.data.shipping_cost,
+          price:    validatedShippingCost,
           quantity: 1,
         }] : []),
       ],
