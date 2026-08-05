@@ -8,33 +8,54 @@ import { cn, getDisplayName, getInitials } from '@/lib/utils'
 import type { UserRole } from '@/lib/supabase/client'
 
 const NAV_ITEMS = [
-  { href: '/admin/dashboard', icon: '📊', label: 'Dashboard' },
-  { href: '/admin/pengguna', icon: '👥', label: 'Kelola Pengguna' },
-  { href: '/admin/profil', icon: '👤', label: 'Profil Saya' },
-  { href: '/admin/verifikasi', icon: '🪪', label: 'Verifikasi KYC' },
-  { href: '/admin/wilayah', icon: '🗺️', label: 'Data Wilayah' },
-  { href: '/admin/audit-log', icon: '📜', label: 'Audit Log' },
+  { href: '/admin/dashboard',   icon: '📊', label: 'Dashboard'       },
+  { href: '/admin/pengguna',    icon: '👥', label: 'Kelola Pengguna' },
+  { href: '/admin/profil',      icon: '👤', label: 'Profil Saya'     },
+  { href: '/admin/verifikasi',  icon: '🪪', label: 'Verifikasi KYC'  },
+  { href: '/admin/wilayah',     icon: '🗺️', label: 'Data Wilayah'    },
+  { href: '/admin/audit-log',   icon: '📜', label: 'Audit Log'       },
 ]
 
 const OTHER_ROLE_CONFIG: Record<string, { emoji: string; label: string; href: string; color: string }> = {
-  petani: { emoji: '🌾', label: 'Mode Petani', href: '/petani/dashboard', color: 'text-green-700' },
-  pembeli: { emoji: '🛒', label: 'Mode Pembeli', href: '/pembeli/marketplace', color: 'text-amber-700' },
-  penyedia_alat: { emoji: '🚜', label: 'Mode Penyedia Alat', href: '/penyedia/dashboard', color: 'text-blue-700' },
+  petani:        { emoji: '🌾', label: 'Mode Petani',        href: '/petani/dashboard',    color: 'text-green-700' },
+  pembeli:       { emoji: '🛒', label: 'Mode Pembeli',       href: '/pembeli/marketplace', color: 'text-amber-700' },
+  penyedia_alat: { emoji: '🚜', label: 'Mode Penyedia Alat', href: '/penyedia/dashboard',  color: 'text-blue-700'  },
 }
 
 // ─── Helper: update profile role tanpa TypeScript never error ────────────────
 // Root cause: @supabase/ssr tidak selalu bisa resolve Update<'profiles'> type
 // dari Database generic — menghasilkan `never` untuk argumen .update().
-// Fix: cast .from() result ke `any` secara terlokalisir. Ini workaround untuk
-// bug library, bukan pola umum yang dipakai di seluruh codebase.
+// Fix: cast .from() result ke `any` secara terlokalisir.
+//
+// PERUBAHAN: dari .upsert() ke .update() murni.
+// Alasan: fungsi ini HANYA switch role, tidak boleh create profile baru.
+// Upsert dengan payload { id, role } yang tidak include full_name akan
+// bikin baris kosong yang gagal karena NOT NULL constraint pada full_name.
+// Kalau baris profile tidak ada, itu bug di alur registrasi (bukan
+// tanggung jawab endpoint switch role untuk "memperbaikinya" dengan
+// data corrupt).
 async function updateProfileRole(
   supabase: ReturnType<typeof createClient>,
   userId: string,
   newRole: UserRole,
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase.from('profiles') as any)
-    .upsert({ id: userId, role: newRole }, { onConflict: 'id' })
+  const { data, error } = await (supabase.from('profiles') as any)
+    .update({ role: newRole })
+    .eq('id', userId)
+    .select('id')
+
+  if (error) {
+    console.error('[AdminSidebar] Update role error:', error.message)
+    return { ok: false, error: error.message }
+  }
+
+  if (!data || data.length === 0) {
+    console.error('[AdminSidebar] Profile tidak ditemukan untuk user:', userId)
+    return { ok: false, error: 'Profile tidak ditemukan' }
+  }
+
+  return { ok: true }
 }
 
 interface Props {
@@ -44,10 +65,10 @@ interface Props {
 
 export function AdminSidebar({ adminName, userRoles = [] }: Props) {
   const pathname = usePathname()
-  const router = useRouter()
+  const router   = useRouter()
   const supabase = createClient()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [switching, setSwitching] = useState(false)
+  const [switching,  setSwitching]  = useState(false)
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -56,13 +77,33 @@ export function AdminSidebar({ adminName, userRoles = [] }: Props) {
 
   const handleSwitchRole = async (newRole: UserRole) => {
     setSwitching(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      await updateProfileRole(supabase, user.id, newRole)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (!user) {
+        alert('Sesi habis. Silakan login ulang.')
+        router.push('/login')
+        return
+      }
+
+      const result = await updateProfileRole(supabase, user.id, newRole)
+
+      if (!result.ok) {
+        // Beri feedback ke admin — jangan silent
+        alert(
+          `Gagal switch role: ${result.error ?? 'Unknown error'}. ` +
+          'Coba refresh halaman atau logout lalu login ulang.'
+        )
+        return
+      }
+
       await supabase.auth.updateUser({ data: { role: newRole } })
+
+      const dest = OTHER_ROLE_CONFIG[newRole]?.href ?? '/'
+      window.location.href = dest
+    } finally {
+      setSwitching(false)
     }
-    const dest = OTHER_ROLE_CONFIG[newRole]?.href ?? '/'
-    window.location.href = dest
   }
 
   const otherRoles = userRoles.filter(r => r !== 'admin' && r in OTHER_ROLE_CONFIG)

@@ -14,7 +14,10 @@ export async function POST(request: Request) {
     const { roles, activeRole } = body
 
     if (!roles || !Array.isArray(roles) || !activeRole) {
-      return NextResponse.json({ error: 'Parameter roles (array) dan activeRole wajib diisi' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Parameter roles (array) dan activeRole wajib diisi' },
+        { status: 400 }
+      )
     }
 
     const SELF_SERVICE_ROLES = ['petani', 'pembeli', 'penyedia_alat']
@@ -33,27 +36,36 @@ export async function POST(request: Request) {
     }
 
     if (!validatedRoles.includes(activeRole)) {
-      return NextResponse.json({ error: 'Peran aktif tidak terdapat dalam daftar peran' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Peran aktif tidak terdapat dalam daftar peran' },
+        { status: 400 }
+      )
     }
 
     const adminSupabase = createAdminSupabaseClient()
 
-    // ── DEBUG: Log semua yang dikirim ke Supabase ───────────────────────────
     console.log('[ROLES UPDATE] User ID:', user.id)
     console.log('[ROLES UPDATE] Payload:', { roles: validatedRoles, role: activeRole })
 
+    // ── UPDATE murni — tidak pakai upsert.
+    //    Endpoint ini hanya mengubah role pada baris profiles yang SUDAH ADA.
+    //    Kalau baris tidak ada, itu tanda ada masalah di alur registrasi
+    //    (trigger on_auth_user_created gagal / tidak aktif).
+    //    Jangan diam-diam membuat baris baru dengan data kosong — itu akan
+    //    menghasilkan profile corrupt (full_name NULL/kosong).
+    //
+    //    Select juga full_name untuk sekaligus verify baris memang exist
+    //    dan tidak corrupt.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error: dbError } = await (adminSupabase.from('profiles') as any)
       .update({ roles: validatedRoles, role: activeRole })
       .eq('id', user.id)
-      .select('id, role, roles')
+      .select('id, role, roles, full_name')
 
-    // ── DEBUG: Log hasil update ─────────────────────────────────────────────
     console.log('[ROLES UPDATE] DB Response — data:', JSON.stringify(data))
     console.log('[ROLES UPDATE] DB Response — error:', JSON.stringify(dbError))
 
     if (dbError) {
-      // Return error asli dari Supabase supaya bisa didebug
       return NextResponse.json(
         {
           error: 'Gagal menyimpan perubahan role',
@@ -65,17 +77,33 @@ export async function POST(request: Request) {
       )
     }
 
+    // ── Kasus: baris profiles tidak ditemukan sama sekali ──────────────────
+    // Ini berarti user punya auth.users record tapi TIDAK punya profiles record.
+    // Kemungkinan besar trigger on_auth_user_created gagal saat user register.
+    //
+    // Jangan diam-diam buat baris baru — pesan eksplisit ke user + log
+    // ke server supaya bisa diinvestigasi.
     if (!data || data.length === 0) {
+      console.error(
+        '[ROLES UPDATE] PROFILE_NOT_FOUND — user auth ada tapi profile tidak ada:',
+        {
+          userId: user.id,
+          userEmail: user.email,
+          userMetadata: user.user_metadata,
+        }
+      )
       return NextResponse.json(
         {
-          error: 'Update berhasil tapi tidak ada baris yang berubah. Cek apakah user profile ada di database.',
-          userId: user.id,
+          error:
+            'Profil kamu belum lengkap atau belum tersinkron. Coba logout lalu login ulang. ' +
+            'Kalau masih gagal, hubungi admin.',
+          code: 'PROFILE_NOT_FOUND',
         },
-        { status: 500 }
+        { status: 404 }
       )
     }
 
-    // Update metadata auth
+    // Update metadata auth supaya sinkron dengan middleware/JWT
     const { error: authError } = await adminSupabase.auth.admin.updateUserById(
       user.id,
       {
@@ -90,7 +118,9 @@ export async function POST(request: Request) {
       console.warn('[ROLES UPDATE AUTH META ERROR]', authError.message)
     }
 
-    console.log(`[AUDIT] User ${user.id} self-assigned roles: ${validatedRoles.join(',')}, active: ${activeRole}`)
+    console.log(
+      `[AUDIT] User ${user.id} self-assigned roles: ${validatedRoles.join(',')}, active: ${activeRole}`
+    )
 
     return NextResponse.json({
       success: true,
@@ -100,9 +130,6 @@ export async function POST(request: Request) {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Terjadi kesalahan pada server'
     console.error('[ROLES UPDATE UNCAUGHT ERROR]', err)
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

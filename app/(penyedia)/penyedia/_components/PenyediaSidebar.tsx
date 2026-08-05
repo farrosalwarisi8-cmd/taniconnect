@@ -8,18 +8,18 @@ import { cn, normalizeUserRole } from '@/lib/utils'
 import type { UserRole } from '@/lib/supabase/client'
 
 const NAV_ITEMS = [
-  { href: '/penyedia/dashboard', icon: '📊', label: 'Dashboard'     },
-  { href: '/penyedia/alat',      icon: '🚜', label: 'Alat Saya'     },
-  { href: '/penyedia/booking',   icon: '📥', label: 'Booking Masuk' },
-  { href: '/penyedia/pengiriman', icon: '🚚', label: 'Pengiriman'   },
-  { href: '/penyedia/profil',    icon: '👤', label: 'Profil'        },
+  { href: '/penyedia/dashboard',  icon: '📊', label: 'Dashboard'     },
+  { href: '/penyedia/alat',       icon: '🚜', label: 'Alat Saya'     },
+  { href: '/penyedia/booking',    icon: '📥', label: 'Booking Masuk' },
+  { href: '/penyedia/pengiriman', icon: '🚚', label: 'Pengiriman'    },
+  { href: '/penyedia/profil',     icon: '👤', label: 'Profil'        },
 ]
 
 const ALL_ROLE_CONFIG: Record<string, { emoji: string; label: string; href: string; color: string; gradient: string }> = {
-  petani:        { emoji: '🌾', label: 'Petani',         href: '/petani/dashboard',    color: 'text-green-700',  gradient: 'from-green-500 to-emerald-600' },
-  pembeli:       { emoji: '🛒', label: 'Pembeli',        href: '/pembeli/marketplace', color: 'text-amber-700',  gradient: 'from-amber-400 to-orange-500'  },
-  penyedia_alat: { emoji: '🚜', label: 'Penyedia Alat',  href: '/penyedia/dashboard',  color: 'text-blue-700',   gradient: 'from-blue-500 to-cyan-600'     },
-  admin:         { emoji: '🔐', label: 'Administrator',  href: '/admin/dashboard',     color: 'text-purple-700', gradient: 'from-purple-600 to-violet-700' },
+  petani:        { emoji: '🌾', label: 'Petani',        href: '/petani/dashboard',    color: 'text-green-700',  gradient: 'from-green-500 to-emerald-600' },
+  pembeli:       { emoji: '🛒', label: 'Pembeli',       href: '/pembeli/marketplace', color: 'text-amber-700',  gradient: 'from-amber-400 to-orange-500'  },
+  penyedia_alat: { emoji: '🚜', label: 'Penyedia Alat', href: '/penyedia/dashboard',  color: 'text-blue-700',   gradient: 'from-blue-500 to-cyan-600'     },
+  admin:         { emoji: '🔐', label: 'Administrator', href: '/admin/dashboard',     color: 'text-purple-700', gradient: 'from-purple-600 to-violet-700' },
 }
 
 interface Props {
@@ -29,10 +29,10 @@ interface Props {
 
 export function PenyediaSidebar({ providerName, userRoles = [] }: Props) {
   const pathname = usePathname()
-  const router = useRouter()
+  const router   = useRouter()
   const supabase = createClient()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [switching, setSwitching] = useState(false)
+  const [switching,  setSwitching]  = useState(false)
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -41,19 +41,51 @@ export function PenyediaSidebar({ providerName, userRoles = [] }: Props) {
 
   const handleSwitchRole = async (newRole: UserRole) => {
     setSwitching(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase.from('profiles') as any)
-          .upsert({ id: user.id, role: newRole }, { onConflict: 'id' })
-        await supabase.auth.updateUser({ data: { role: newRole } })
-      } catch {
-        // ignore and still redirect
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (!user) {
+        alert('Sesi habis. Silakan login ulang.')
+        router.push('/login')
+        return
       }
+
+      // ── PERUBAHAN: dari .upsert() ke .update() murni ──────────────────────
+      // Alasan sama seperti di AdminSidebar & API roles: upsert dengan
+      // payload { id, role } tanpa full_name akan bikin baris kosong yang
+      // gagal NOT NULL constraint. Endpoint switch role tidak boleh
+      // membuat profile baru — itu tanggung jawab flow registrasi.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.from('profiles') as any)
+        .update({ role: newRole })
+        .eq('id', user.id)
+        .select('id')
+
+      if (error) {
+        console.error('[PenyediaSidebar] Update role error:', error.message)
+        alert(
+          `Gagal switch role: ${error.message}. ` +
+          'Coba refresh halaman atau logout lalu login ulang.'
+        )
+        return
+      }
+
+      if (!data || data.length === 0) {
+        console.error('[PenyediaSidebar] Profile tidak ditemukan untuk user:', user.id)
+        alert(
+          'Profil kamu tidak ditemukan di database. Coba logout lalu login ulang. ' +
+          'Kalau masih gagal, hubungi admin.'
+        )
+        return
+      }
+
+      await supabase.auth.updateUser({ data: { role: newRole } })
+
+      const dest = ALL_ROLE_CONFIG[newRole]?.href ?? '/'
+      window.location.href = dest
+    } finally {
+      setSwitching(false)
     }
-    const dest = ALL_ROLE_CONFIG[newRole]?.href ?? '/'
-    window.location.href = dest
   }
 
   const otherRoles = userRoles.filter(r => r !== 'penyedia_alat')
@@ -149,7 +181,7 @@ export function PenyediaSidebar({ providerName, userRoles = [] }: Props) {
           <span>Tanya AI</span>
         </Link>
 
-        {/* Switch role section — show all roles with checkmark */}
+        {/* Switch role section */}
         {userRoles.length > 1 && (
           <>
             <div className="pt-2 pb-1">
