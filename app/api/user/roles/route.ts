@@ -1,219 +1,107 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, createAdminSupabaseClient } from '@/lib/supabase/server'
-import type { UserRole } from '@/lib/supabase/client'
 
-const SELF_SERVICE_ROLES: UserRole[] = ['petani', 'pembeli', 'penyedia_alat']
-
-/**
- * GET /api/user/roles
- * Ambil role terbaru dari database Supabase (bukan dari JWT/cache).
- */
-export async function GET() {
-  try {
-    const supabase = await createServerSupabaseClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      console.warn('[API /api/user/roles GET] 401 Unauthorized - invalid user session:', authError?.message)
-      return NextResponse.json({ error: 'Tidak terotentikasi' }, { status: 401 })
-    }
-
-    const { data: profile, error: dbError } = await supabase
-      .from('profiles')
-      .select('role, roles')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    if (dbError) {
-      console.error('[API /api/user/roles GET DB ERROR]:', dbError)
-      return NextResponse.json({ error: `Gagal membaca profil: ${dbError.message}` }, { status: 500 })
-    }
-
-    const profileAny = profile as { role: UserRole | null; roles: UserRole[] | null } | null
-    const activeRole: UserRole = profileAny?.role ?? 'pembeli'
-    const roles: UserRole[] =
-      profileAny?.roles && profileAny.roles.length > 0
-        ? profileAny.roles
-        : [activeRole]
-
-    return NextResponse.json({ role: activeRole, roles })
-  } catch (err: unknown) {
-    const errorObj = err instanceof Error ? err : new Error(String(err))
-    console.error('[API /api/user/roles GET EXCEPTION]:', errorObj.stack || errorObj.message)
-    return NextResponse.json({ error: errorObj.message || 'Terjadi kesalahan pada server' }, { status: 500 })
-  }
-}
-
-/**
- * POST /api/user/roles
- * Update role aktif + daftar roles user di Supabase Database & Auth Metadata.
- */
 export async function POST(request: Request) {
   try {
     const supabase = await createServerSupabaseClient()
-    const { data: { user }, error: authUserError } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser()
 
-    if (authUserError || !user) {
-      console.warn('[API /api/user/roles POST] 401 Unauthorized - user session invalid:', authUserError?.message)
-      return NextResponse.json({ error: 'Sesi habis atau tidak terotentikasi, silakan login ulang' }, { status: 401 })
+    if (!user) {
+      return NextResponse.json({ error: 'Tidak terotentikasi' }, { status: 401 })
     }
 
-    let body: any = null
-    try {
-      body = await request.json()
-    } catch {
-      console.warn('[API /api/user/roles POST] 400 Bad Request - invalid JSON body')
-      return NextResponse.json({ error: 'Payload JSON tidak valid' }, { status: 400 })
+    const body = await request.json()
+    const { roles, activeRole } = body
+
+    if (!roles || !Array.isArray(roles) || !activeRole) {
+      return NextResponse.json({ error: 'Parameter roles (array) dan activeRole wajib diisi' }, { status: 400 })
     }
 
-    console.log('[API /api/user/roles POST] Incoming Request:', {
-      userId: user.id,
-      userEmail: user.email,
-      body,
-    })
+    const SELF_SERVICE_ROLES = ['petani', 'pembeli', 'penyedia_alat']
 
-    const { roles, activeRole } = body as { roles?: unknown; activeRole?: unknown }
-
-    if (!Array.isArray(roles) || roles.length === 0 || typeof activeRole !== 'string') {
-      console.warn('[API /api/user/roles POST] 400 Bad Request - missing parameters:', { roles, activeRole })
-      return NextResponse.json(
-        { error: 'Parameter roles (array) dan activeRole (string) wajib diisi' },
-        { status: 400 }
-      )
-    }
-
-    // Blokir role admin dari self-service
-    if ((roles as string[]).includes('admin') || activeRole === 'admin') {
-      console.warn('[API /api/user/roles POST] 403 Forbidden - admin role self-assignment denied for user:', user.id)
+    if (roles.includes('admin') || activeRole === 'admin') {
       return NextResponse.json(
         { error: 'Akses ditolak. Tidak dapat memberikan peran admin melalui jalur ini.' },
         { status: 403 }
       )
     }
 
-    const validatedRoles = (roles as string[]).filter((r): r is UserRole =>
-      SELF_SERVICE_ROLES.includes(r as UserRole)
-    )
+    const validatedRoles = roles.filter((r: string) => SELF_SERVICE_ROLES.includes(r))
 
     if (validatedRoles.length === 0) {
-      console.warn('[API /api/user/roles POST] 400 Bad Request - no valid roles provided:', roles)
       return NextResponse.json({ error: 'Minimal pilih 1 peran yang valid' }, { status: 400 })
     }
 
-    const validatedActiveRole = SELF_SERVICE_ROLES.includes(activeRole as UserRole)
-      ? (activeRole as UserRole)
-      : validatedRoles[0]
-
-    if (!validatedRoles.includes(validatedActiveRole)) {
-      console.warn('[API /api/user/roles POST] 400 Bad Request - activeRole not in roles list:', { validatedActiveRole, validatedRoles })
-      return NextResponse.json(
-        { error: 'Peran aktif tidak terdapat dalam daftar peran' },
-        { status: 400 }
-      )
+    if (!validatedRoles.includes(activeRole)) {
+      return NextResponse.json({ error: 'Peran aktif tidak terdapat dalam daftar peran' }, { status: 400 })
     }
 
-    // 1. Primary Strategy: Update DB profiles via authenticated user client `supabase`
-    const { data: updatedProfile, error: dbError } = await supabase
-      .from('profiles')
-      .upsert(
-        {
-          id: user.id,
-          role: validatedActiveRole,
-          roles: validatedRoles,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'id' }
-      )
+    const adminSupabase = createAdminSupabaseClient()
+
+    // ── DEBUG: Log semua yang dikirim ke Supabase ───────────────────────────
+    console.log('[ROLES UPDATE] User ID:', user.id)
+    console.log('[ROLES UPDATE] Payload:', { roles: validatedRoles, role: activeRole })
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error: dbError } = await (adminSupabase.from('profiles') as any)
+      .update({ roles: validatedRoles, role: activeRole })
+      .eq('id', user.id)
       .select('id, role, roles')
 
-    console.log('[API /api/user/roles POST] User Client Upsert Result:', { updatedProfile, dbError })
+    // ── DEBUG: Log hasil update ─────────────────────────────────────────────
+    console.log('[ROLES UPDATE] DB Response — data:', JSON.stringify(data))
+    console.log('[ROLES UPDATE] DB Response — error:', JSON.stringify(dbError))
 
-    let finalProfile = updatedProfile
-    let finalDbError = dbError
-
-    // 2. Secondary Strategy: Fallback to Admin Client if user client upsert returned RLS or column error
     if (dbError) {
-      try {
-        const adminSupabase = createAdminSupabaseClient()
-        const { data: adminProfile, error: adminDbError } = await adminSupabase
-          .from('profiles')
-          .upsert(
-            {
-              id: user.id,
-              role: validatedActiveRole,
-              roles: validatedRoles,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: 'id' }
-          )
-          .select('id, role, roles')
-
-        console.log('[API /api/user/roles POST] Admin Client Fallback Result:', { adminProfile, adminDbError })
-        finalProfile = adminProfile
-        finalDbError = adminDbError
-      } catch (adminErr) {
-        console.warn('[API /api/user/roles POST] Admin Client Fallback Error:', adminErr)
-      }
-    }
-
-    if (finalDbError) {
-      console.error('[API /api/user/roles POST] DB Error Saving Role:', finalDbError)
+      // Return error asli dari Supabase supaya bisa didebug
       return NextResponse.json(
-        { error: `Gagal menyimpan di database: ${finalDbError.message}` },
+        {
+          error: 'Gagal menyimpan perubahan role',
+          details: dbError.message,
+          hint: dbError.hint ?? null,
+          code: dbError.code ?? null,
+        },
         { status: 500 }
       )
     }
 
-    // 3. Best-effort sync to relational user_roles table if created in DB
-    try {
-      for (const r of validatedRoles) {
-        await supabase.from('user_roles').upsert(
-          { user_id: user.id, role: r },
-          { onConflict: 'user_id, role' }
-        )
-      }
-    } catch {
-      // Optional relational table sync
-    }
-
-    // 4. Sync Auth User Metadata
-    try {
-      await supabase.auth.updateUser({
-        data: {
-          role: validatedActiveRole,
-          roles: validatedRoles,
+    if (!data || data.length === 0) {
+      return NextResponse.json(
+        {
+          error: 'Update berhasil tapi tidak ada baris yang berubah. Cek apakah user profile ada di database.',
+          userId: user.id,
         },
-      })
-    } catch (authErr) {
-      console.warn('[API /api/user/roles POST] User metadata update notice:', authErr)
+        { status: 500 }
+      )
     }
 
-    try {
-      const adminSupabase = createAdminSupabaseClient()
-      await adminSupabase.auth.admin.updateUserById(user.id, {
+    // Update metadata auth
+    const { error: authError } = await adminSupabase.auth.admin.updateUserById(
+      user.id,
+      {
         user_metadata: {
-          role: validatedActiveRole,
+          role: activeRole,
           roles: validatedRoles,
         },
-      })
-    } catch {
-      // Best-effort admin sync
+      }
+    )
+
+    if (authError) {
+      console.warn('[ROLES UPDATE AUTH META ERROR]', authError.message)
     }
 
-    console.log(
-      `[AUDIT SUCCESS] User ${user.id} updated active role → ${validatedActiveRole}, roles: [${validatedRoles.join(', ')}]`
-    )
+    console.log(`[AUDIT] User ${user.id} self-assigned roles: ${validatedRoles.join(',')}, active: ${activeRole}`)
 
     return NextResponse.json({
       success: true,
-      role: validatedActiveRole,
+      role: activeRole,
       roles: validatedRoles,
     })
   } catch (err: unknown) {
-    const errorObj = err instanceof Error ? err : new Error(String(err))
-    console.error('[API /api/user/roles POST EXCEPTION STACK]:', errorObj.stack || errorObj.message)
+    const message = err instanceof Error ? err.message : 'Terjadi kesalahan pada server'
+    console.error('[ROLES UPDATE UNCAUGHT ERROR]', err)
     return NextResponse.json(
-      { error: errorObj.message || 'Terjadi kesalahan pada server' },
+      { error: message },
       { status: 500 }
     )
   }
