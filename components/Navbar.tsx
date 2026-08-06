@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react'
 import { createClient, type UserRole } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
 import { cn } from '@/lib/utils'
+import { CartButton } from '@/components/ui/CartButton'
 
 // ─── Role config ──────────────────────────────────────────────
 export const ROLE_CONFIG: Record<string, {
@@ -151,8 +152,10 @@ export function Navbar() {
               {loading ? (
                 <div className="w-8 h-8 rounded-full bg-surface animate-pulse" />
               ) : user ? (
-                /* ─── Logged in: user dropdown ─── */
-                <div className="relative" ref={dropdownRef}>
+                /* ─── Logged in: cart + user dropdown ─── */
+                <div className="flex items-center gap-2">
+                  <CartButton variant="compact" />
+                  <div className="relative" ref={dropdownRef}>
                   {/* Active role badge + avatar trigger */}
                   <button
                     type="button"
@@ -287,6 +290,7 @@ export function Navbar() {
                       </div>
                     </div>
                   )}
+                </div>
                 </div>
               ) : (
                 /* ─── Guest: login + register buttons ─── */
