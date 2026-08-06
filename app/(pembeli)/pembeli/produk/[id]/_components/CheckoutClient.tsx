@@ -56,6 +56,7 @@ function CheckoutFlow(props: Props) {
   const [buyerCityInput, setBuyerCityInput] = useState<string>('')
   const [calculatingGeo, setCalculatingGeo] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [addingToCart, setAddingToCart] = useState(false)
   const [snapReady, setSnapReady] = useState(false)
   const [user, setUser] = useState<{ id: string } | null>(null)
 
@@ -64,7 +65,6 @@ function CheckoutFlow(props: Props) {
       const { data } = await supabase.auth.getUser()
       if (data.user) {
         setUser({ id: data.user.id })
-        // Fetch buyer city from profile if available
         const { data: profile } = await supabase
           .from('profiles')
           .select('city')
@@ -126,7 +126,6 @@ function CheckoutFlow(props: Props) {
     }
   }
 
-  // Calculate shipping cost & coverage check using reusable shipping module
   const selectedService = props.shippingServices.find(s => s.id === selectedServiceId)
   const distance = Number(distanceKm) || 0
   const maxCoverage = selectedService?.max_coverage_km ?? 50
@@ -148,6 +147,7 @@ function CheckoutFlow(props: Props) {
   const outOfStock = props.maxQuantity < 1
   const hasShipping = props.shippingServices.length > 0
 
+  // ─── Handler: Beli Sekarang (checkout langsung) ─────────────────────────────
   const handleCheckout = async () => {
     if (!user) {
       toast('Silakan login untuk melanjutkan checkout', 'warning')
@@ -233,6 +233,56 @@ function CheckoutFlow(props: Props) {
     }
   }
 
+  // ─── Handler: Tambah ke Keranjang ───────────────────────────────────────────
+  // BEDA dari handleCheckout: ini tidak trigger pembayaran, hanya insert/update
+  // ke cart_items. Ongkos kirim tidak divalidasi di sini (dihitung saat checkout
+  // dari halaman keranjang).
+  const handleAddToCart = async () => {
+    if (!user) {
+      toast('Silakan login untuk menambah ke keranjang', 'warning')
+      router.push('/login?redirect=' + encodeURIComponent(window.location.pathname))
+      return
+    }
+
+    if (quantity > props.maxQuantity) {
+      toast(`Stok maksimal ${props.maxQuantity} ${props.unit}`, 'warning')
+      return
+    }
+
+    setAddingToCart(true)
+    try {
+      const res = await fetch('/api/cart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: props.productId,
+          quantity,
+        }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error ?? 'Gagal menambah ke keranjang')
+      }
+
+      // Trigger badge cart di navbar untuk refresh
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('cart:updated'))
+      }
+
+      toast(
+        `${quantity} ${props.unit} ditambahkan ke keranjang 🛒`,
+        'success',
+        3000,
+      )
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Gagal menambah ke keranjang'
+      toast(message, 'error')
+    } finally {
+      setAddingToCart(false)
+    }
+  }
+
   return (
     <>
       {/* Jumlah — ala Shopee row layout */}
@@ -271,7 +321,6 @@ function CheckoutFlow(props: Props) {
         <div className="flex items-start gap-4 mb-5">
           <span className="text-sm text-gray-500 w-24 shrink-0 pt-1">Pengiriman</span>
           <div className="flex-1 space-y-3">
-            {/* Shipping service selection */}
             <div className="space-y-2">
               {props.shippingServices.map(svc => (
                 <label
@@ -311,7 +360,6 @@ function CheckoutFlow(props: Props) {
               ))}
             </div>
 
-            {/* Distance input with auto-calculator */}
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2.5">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-semibold text-gray-600">
@@ -324,7 +372,6 @@ function CheckoutFlow(props: Props) {
                 )}
               </div>
 
-              {/* City auto-calculator input row */}
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -359,7 +406,6 @@ function CheckoutFlow(props: Props) {
                 <span className="text-sm text-gray-400 font-medium">KM</span>
               </div>
 
-              {/* Coverage warning */}
               {isOverCoverage && (
                 <div className="bg-red-50 border border-red-200 rounded-md p-2 flex items-center gap-2">
                   <span className="text-red-500 text-sm">⚠️</span>
@@ -369,7 +415,6 @@ function CheckoutFlow(props: Props) {
                 </div>
               )}
 
-              {/* Ongkir calculation preview */}
               {distance > 0 && !isOverCoverage && selectedService && (
                 <div className="mt-2.5 pt-2.5 border-t border-gray-200">
                   <div className="flex items-center justify-between text-xs text-gray-600">
@@ -426,17 +471,18 @@ function CheckoutFlow(props: Props) {
 
       {/* Desktop buttons — ala Shopee */}
       <div className="hidden lg:flex gap-3 mt-auto">
+        {/* PERUBAHAN: onClick sekarang handleAddToCart (bukan handleCheckout) */}
         <button
           type="button"
-          disabled={outOfStock || loading}
-          onClick={handleCheckout}
+          disabled={outOfStock || loading || addingToCart}
+          onClick={handleAddToCart}
           className="flex-1 py-3 border border-[#ee4d2d] text-[#ee4d2d] font-medium rounded-sm hover:bg-orange-50 disabled:opacity-50 transition-colors"
         >
-          {outOfStock ? 'Stok Habis' : 'Masukkan Keranjang'}
+          {addingToCart ? 'Menambah...' : outOfStock ? 'Stok Habis' : '🛒 Masukkan Keranjang'}
         </button>
         <button
           type="button"
-          disabled={outOfStock || loading}
+          disabled={outOfStock || loading || addingToCart}
           onClick={handleCheckout}
           className="flex-1 py-3 bg-[#ee4d2d] hover:bg-[#d73211] text-white font-medium rounded-sm disabled:opacity-50 transition-colors"
         >
@@ -455,17 +501,18 @@ function CheckoutFlow(props: Props) {
             Beranda
           </MobileLink>
           <div className="flex-1 flex gap-2">
+            {/* PERUBAHAN: onClick sekarang handleAddToCart */}
             <button
               type="button"
-              disabled={outOfStock || loading}
-              onClick={handleCheckout}
+              disabled={outOfStock || loading || addingToCart}
+              onClick={handleAddToCart}
               className="flex-1 py-2.5 border border-[#ee4d2d] text-[#ee4d2d] text-sm font-medium rounded-sm disabled:opacity-50"
             >
-              Keranjang
+              {addingToCart ? '...' : 'Keranjang'}
             </button>
             <button
               type="button"
-              disabled={outOfStock || loading}
+              disabled={outOfStock || loading || addingToCart}
               onClick={handleCheckout}
               className="flex-[2] py-2.5 bg-[#ee4d2d] text-white text-sm font-medium rounded-sm disabled:opacity-50"
             >

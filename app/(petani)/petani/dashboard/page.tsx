@@ -135,11 +135,27 @@ export default async function PetaniDashboardPage() {
 
   return (
     <main className="min-h-screen bg-[#FAFAF9] pb-24">
-      {/* Hero Header */}
+      {/* ─── Hero Header ─────────────────────────────────────────────────────
+          FIX BUG (Tahap 1):
+          Sebelumnya lingkaran dekoratif bawah menjorok 96px keluar banner
+          (translate-y-1/2 dari lingkaran w-48/h-48 = 96px), sementara card
+          row di bawah cuma di-pull-up 40px (-mt-10). Ini menyebabkan strip
+          ~56px "bocor" di kiri bawah banner yang terlihat sebagai potongan
+          lingkaran samar di belakang card "Rp 0".
+
+          Perbaikan:
+          - Lingkaran bawah: translate-y-1/2 → translate-y-1/4 (menjorok
+            hanya 48px, tetap fully-covered oleh card yang di-pull-up 40px
+            + shadow card menutupi sisa 8px)
+          - Lingkaran atas: translate-y-1/3 → translate-y-1/4 (konsistensi
+            skala visual, walau tidak overlap dengan card)
+          - pull-up card dipertahankan -mt-10 karena efek floating card
+            sudah OK
+      */}
       <div className="gradient-dashboard relative overflow-hidden">
-        {/* Decorative elements */}
-        <div className="absolute top-0 right-0 w-72 h-72 rounded-full bg-white/5 -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 rounded-full bg-white/5 translate-y-1/2 -translate-x-1/4" />
+        {/* Decorative elements — posisi diperkecil supaya tidak menjorok ke card row */}
+        <div className="absolute top-0 right-0 w-72 h-72 rounded-full bg-white/5 -translate-y-1/4 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 rounded-full bg-white/5 translate-y-1/4 -translate-x-1/4" />
         <div className="absolute top-6 right-8 text-6xl opacity-10 select-none">
           🌿
         </div>
