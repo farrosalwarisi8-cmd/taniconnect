@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { cn, normalizeUserRole } from '@/lib/utils'
+import { useAuth } from '@/context/AuthContext'
 import type { UserRole } from '@/lib/supabase/client'
 
 const NAV_ITEMS = [
@@ -39,50 +40,12 @@ export function PenyediaSidebar({ providerName, userRoles = [] }: Props) {
     router.push('/login')
   }
 
+  const { switchRole } = useAuth()
+
   const handleSwitchRole = async (newRole: UserRole) => {
     setSwitching(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-
-      if (!user) {
-        alert('Sesi habis. Silakan login ulang.')
-        router.push('/login')
-        return
-      }
-
-      // ── PERUBAHAN: dari .upsert() ke .update() murni ──────────────────────
-      // Alasan sama seperti di AdminSidebar & API roles: upsert dengan
-      // payload { id, role } tanpa full_name akan bikin baris kosong yang
-      // gagal NOT NULL constraint. Endpoint switch role tidak boleh
-      // membuat profile baru — itu tanggung jawab flow registrasi.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase.from('profiles') as any)
-        .update({ role: newRole })
-        .eq('id', user.id)
-        .select('id')
-
-      if (error) {
-        console.error('[PenyediaSidebar] Update role error:', error.message)
-        alert(
-          `Gagal switch role: ${error.message}. ` +
-          'Coba refresh halaman atau logout lalu login ulang.'
-        )
-        return
-      }
-
-      if (!data || data.length === 0) {
-        console.error('[PenyediaSidebar] Profile tidak ditemukan untuk user:', user.id)
-        alert(
-          'Profil kamu tidak ditemukan di database. Coba logout lalu login ulang. ' +
-          'Kalau masih gagal, hubungi admin.'
-        )
-        return
-      }
-
-      await supabase.auth.updateUser({ data: { role: newRole } })
-
-      const dest = ALL_ROLE_CONFIG[newRole]?.href ?? '/'
-      window.location.href = dest
+      await switchRole(newRole)
     } finally {
       setSwitching(false)
     }

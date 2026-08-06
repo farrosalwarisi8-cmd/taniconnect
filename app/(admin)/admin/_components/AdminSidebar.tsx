@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/context/AuthContext'
 import { cn, getDisplayName, getInitials } from '@/lib/utils'
 import type { UserRole } from '@/lib/supabase/client'
 
@@ -75,32 +76,12 @@ export function AdminSidebar({ adminName, userRoles = [] }: Props) {
     router.push('/login')
   }
 
+  const { switchRole } = useAuth()
+
   const handleSwitchRole = async (newRole: UserRole) => {
     setSwitching(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-
-      if (!user) {
-        alert('Sesi habis. Silakan login ulang.')
-        router.push('/login')
-        return
-      }
-
-      const result = await updateProfileRole(supabase, user.id, newRole)
-
-      if (!result.ok) {
-        // Beri feedback ke admin — jangan silent
-        alert(
-          `Gagal switch role: ${result.error ?? 'Unknown error'}. ` +
-          'Coba refresh halaman atau logout lalu login ulang.'
-        )
-        return
-      }
-
-      await supabase.auth.updateUser({ data: { role: newRole } })
-
-      const dest = OTHER_ROLE_CONFIG[newRole]?.href ?? '/'
-      window.location.href = dest
+      await switchRole(newRole)
     } finally {
       setSwitching(false)
     }

@@ -4,7 +4,7 @@ import { shippingServiceCreateSchema } from '@/lib/validations'
 
 import { getCache, setCache, clearCacheKey } from '@/lib/cache'
 
-const SELLER_ROLES = ['petani', 'penyedia_alat']
+const SELLER_ROLES = ['petani', 'penyedia_alat', 'penyedia_alat_bahan', 'penyedia_alat_berat']
 
 /**
  * GET /api/shipping-services

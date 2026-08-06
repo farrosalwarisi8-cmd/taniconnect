@@ -3,16 +3,12 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { createClient, type UserRole } from '@/lib/supabase/client'
+import { useAuth } from '@/context/AuthContext'
 import { cn } from '@/lib/utils'
-import type { UserRole } from '@/lib/supabase/client'
-import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
-
-// Singleton client — satu instance, tidak dibuat ulang setiap render
-const supabase = createClient()
 
 // ─── Role config ──────────────────────────────────────────────
-const ROLE_CONFIG: Record<UserRole, {
+export const ROLE_CONFIG: Record<string, {
   emoji: string
   label: string
   color: string
@@ -31,9 +27,14 @@ const ROLE_CONFIG: Record<UserRole, {
     href: '/pembeli/marketplace', gradient: 'from-amber-400 to-orange-500',
   },
   penyedia_alat: {
-    emoji: '🚜', label: 'Penyedia Alat',
+    emoji: '🚜', label: 'Penyedia Alat & Bahan',
     color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200',
     href: '/penyedia/dashboard', gradient: 'from-blue-500 to-cyan-600',
+  },
+  penyedia_alat_berat: {
+    emoji: '🏗️', label: 'Penyedia Alat Berat',
+    color: 'text-cyan-700', bg: 'bg-cyan-50 border-cyan-200',
+    href: '/penyedia/dashboard', gradient: 'from-cyan-600 to-teal-700',
   },
   admin: {
     emoji: '🔐', label: 'Administrator',
@@ -49,22 +50,14 @@ const PUBLIC_LINKS = [
   { href: '/tanya-ai', label: 'Tanya AI', emoji: '🤖' },
 ]
 
-interface UserProfile {
-  id: string
-  full_name: string
-  role: UserRole
-  roles: UserRole[]
-}
-
 export function Navbar() {
   const pathname = usePathname()
   const router = useRouter()
+  const supabase = createClient()
+  const { user, activeRole, roles, loading, switching, switchRole } = useAuth()
 
-  const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [loading, setLoading] = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
-  const [switching, setSwitching] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Hide navbar on dashboard routes — dashboards have their own sidebar
@@ -88,138 +81,20 @@ export function Navbar() {
   // Close mobile on route change
   useEffect(() => { setMobileOpen(false) }, [pathname])
 
-  useEffect(() => {
-    let cancelled = false
-
-    const fetchProfile = async (userId: string) => {
-      try {
-        const { data } = await supabase
-          .from('profiles')
-          .select('full_name, role, roles')
-          .eq('id', userId)
-          .maybeSingle()  // tidak throw jika profil belum ada
-
-        if (cancelled) return
-
-        if (data) {
-          const profileData = data as { full_name: string | null; role: UserRole | null; roles: UserRole[] | null }
-          const roles = profileData.roles?.length
-            ? profileData.roles
-            : [profileData.role ?? 'pembeli']
-
-          setProfile({
-            id: userId,
-            full_name: profileData.full_name ?? 'Pengguna',
-            role: profileData.role ?? 'pembeli',
-            roles: roles as UserRole[],
-          })
-        } else {
-          // User auth ada tapi profil belum di DB — tampilkan minimal
-          setProfile({
-            id: userId,
-            full_name: 'Pengguna',
-            role: 'pembeli',
-            roles: ['pembeli'],
-          })
-        }
-      } catch {
-        // Supabase error — tetap guest mode
-        if (!cancelled) setProfile(null)
-      }
-    }
-
-    const initAuth = async () => {
-      try {
-        // 1. Baca session dari cache lokal (tidak ada network call)
-        const { data: { session } } = await supabase.auth.getSession()
-
-        if (cancelled) return
-
-        if (session?.user) {
-          await fetchProfile(session.user.id)
-        } else {
-          // Tidak ada session cache — verifikasi ke server
-          const { data: { user } } = await supabase.auth.getUser()
-          if (!cancelled && user) {
-            await fetchProfile(user.id)
-          }
-        }
-      } catch {
-        // Supabase tidak dikonfigurasi — guest mode
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-
-    initAuth()
-
-    // Subscribe ke perubahan auth state (login/logout/token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event: AuthChangeEvent, session: Session | null) => {
-        if (cancelled) return
-
-        if (session?.user) {
-          setLoading(true)
-          await fetchProfile(session.user.id)
-          if (!cancelled) setLoading(false)
-        } else {
-          setProfile(null)
-          setLoading(false)
-        }
-      }
-    )
-
-    return () => {
-      cancelled = true
-      subscription.unsubscribe()
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
   const handleLogout = async () => {
     await supabase.auth.signOut()
-    router.push('/')
-    router.refresh()
-  }
-
-  const handleSwitchRole = async (newRole: UserRole) => {
-    if (!profile) return
-    setSwitching(true)
     setDropdownOpen(false)
-
-    try {
-      // 1. Update ke Supabase via API server-side (dengan validasi & bypass RLS)
-      const res = await fetch('/api/user/roles', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roles: profile.roles, // pertahankan semua role yang ada
-          activeRole: newRole,
-        }),
-      })
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        console.error('[SWITCH ROLE] Gagal update role:', errData)
-        setSwitching(false)
-        return
-      }
-
-      // 2. Refresh JWT session agar cookie sinkron dengan DB terbaru
-      await supabase.auth.refreshSession()
-
-      // 3. Hard navigate ke dashboard role baru — middleware akan re-validasi dari DB
-      const destination = ROLE_CONFIG[newRole]?.href ?? '/'
-      window.location.href = destination
-    } catch (err) {
-      console.error('[SWITCH ROLE] Error:', err)
-      setSwitching(false)
-    }
+    window.location.href = '/login'
   }
 
-  // Don't show on dashboard routes
+  const handleSwitchRole = async (targetRole: UserRole) => {
+    setDropdownOpen(false)
+    await switchRole(targetRole)
+  }
+
   if (isDashboardRoute) return null
 
-  const activeRoleConfig = profile ? ROLE_CONFIG[profile.role] : null
+  const activeRoleConfig = ROLE_CONFIG[activeRole] ?? ROLE_CONFIG['pembeli']
 
   return (
     <>
@@ -275,7 +150,7 @@ export function Navbar() {
             <div className="flex items-center gap-2">
               {loading ? (
                 <div className="w-8 h-8 rounded-full bg-surface animate-pulse" />
-              ) : profile ? (
+              ) : user ? (
                 /* ─── Logged in: user dropdown ─── */
                 <div className="relative" ref={dropdownRef}>
                   {/* Active role badge + avatar trigger */}
@@ -287,25 +162,22 @@ export function Navbar() {
                     onClick={() => setDropdownOpen(!dropdownOpen)}
                     className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full border border-border hover:border-primary/40 hover:bg-surface transition-all min-h-0 group"
                   >
-                    {/* Active role gradient avatar */}
                     <div className={cn(
                       'w-8 h-8 rounded-full bg-gradient-to-br text-white flex items-center justify-center text-sm font-bold shrink-0 shadow-sm',
-                      activeRoleConfig?.gradient ?? 'from-gray-400 to-gray-600'
+                      activeRoleConfig.gradient
                     )}>
-                      {profile.full_name[0]?.toUpperCase() ?? 'U'}
+                      {user.initial}
                     </div>
 
-                    {/* Name & role */}
                     <div className="text-left hidden sm:block">
-                      <p className="text-xs font-semibold text-fg-dark leading-tight max-w-[100px] truncate">
-                        {profile.full_name.split(' ')[0]}
+                      <p className="text-xs font-semibold text-fg-dark leading-tight max-w-[120px] truncate">
+                        {user.fullName.split(' ')[0]}
                       </p>
-                      <p className={cn('text-[10px] font-medium leading-tight', activeRoleConfig?.color ?? 'text-fg/60')}>
-                        {activeRoleConfig?.emoji} {activeRoleConfig?.label}
+                      <p className={cn('text-[10px] font-medium leading-tight', activeRoleConfig.color)}>
+                        {activeRoleConfig.emoji} {activeRoleConfig.label}
                       </p>
                     </div>
 
-                    {/* Chevron */}
                     <svg
                       className={cn('w-3.5 h-3.5 text-fg/40 transition-transform', dropdownOpen && 'rotate-180')}
                       fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
@@ -316,29 +188,26 @@ export function Navbar() {
 
                   {/* Dropdown */}
                   {dropdownOpen && (
-                    <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-modal border border-border/60 overflow-hidden animate-scale-in z-50">
-                      {/* User info header */}
-                      <div className={cn(
-                        'px-4 py-4 bg-gradient-to-br text-white',
-                        activeRoleConfig?.gradient ?? 'from-gray-500 to-gray-700'
-                      )}>
+                    <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-xl border border-border/60 overflow-hidden animate-scale-in z-50">
+                      {/* Header User */}
+                      <div className={cn('p-4 bg-gradient-to-r text-white', activeRoleConfig.gradient)}>
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-white/25 flex items-center justify-center text-lg font-bold border border-white/30">
-                            {profile.full_name[0]?.toUpperCase()}
+                          <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white font-bold text-base border border-white/30 shadow-sm">
+                            👤
                           </div>
-                          <div>
-                            <p className="font-bold text-white text-sm">{profile.full_name}</p>
-                            <p className="text-white/70 text-xs">
-                              {activeRoleConfig?.emoji} Aktif sebagai {activeRoleConfig?.label}
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-white text-sm truncate">{user.fullName}</p>
+                            <p className="text-white/80 text-xs mt-0.5">
+                              Role Aktif : <b>{activeRoleConfig.label}</b>
                             </p>
                           </div>
                         </div>
                       </div>
 
-                      {/* Go to dashboard */}
+                      {/* Dashboard Link */}
                       <div className="p-2 border-b border-border/50">
                         <Link
-                          href={activeRoleConfig?.href ?? '/'}
+                          href={activeRoleConfig.href}
                           onClick={() => setDropdownOpen(false)}
                           className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface transition-colors min-h-0 group"
                         >
@@ -346,8 +215,8 @@ export function Navbar() {
                             📊
                           </div>
                           <div>
-                            <p className="text-sm font-semibold text-fg-dark">Dashboard Saya</p>
-                            <p className="text-xs text-fg/50">Buka panel {activeRoleConfig?.label}</p>
+                            <p className="text-sm font-bold text-fg-dark">Dashboard</p>
+                            <p className="text-xs text-fg/50">Panel {activeRoleConfig.label}</p>
                           </div>
                           <svg className="w-4 h-4 text-fg/30 ml-auto group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -355,57 +224,53 @@ export function Navbar() {
                         </Link>
                       </div>
 
-                      {/* Ganti Role — show ALL roles with checkmark on active */}
-                      {profile.roles.length > 1 && (
-                        <div className="p-2 border-b border-border/50">
-                          <p className="text-[10px] font-semibold text-fg/40 uppercase tracking-wider px-3 mb-1.5">
+                      {/* Ganti Role Header & Options */}
+                      <div className="p-2 border-b border-border/50">
+                        <div className="flex items-center justify-between px-3 py-1 mb-1">
+                          <p className="text-xs font-bold text-fg/60 uppercase tracking-wider">
                             Ganti Role
                           </p>
-                          {profile.roles.map(role => {
-                            const rc = ROLE_CONFIG[role]
-                            const isActive = role === profile.role
+                          <Link
+                            href="/pilih-peran"
+                            onClick={() => setDropdownOpen(false)}
+                            className="text-[11px] text-primary-dark font-semibold hover:underline"
+                          >
+                            + Tambah
+                          </Link>
+                        </div>
+                        <div className="space-y-1">
+                          {roles.map(r => {
+                            const rc = ROLE_CONFIG[r] ?? { emoji: '👤', label: r, color: 'text-gray-700', bg: 'bg-gray-50', gradient: 'from-gray-500 to-gray-700' }
+                            const isActive = r === activeRole
                             return (
                               <button
-                                key={role}
+                                key={r}
                                 type="button"
-                                onClick={() => !isActive && handleSwitchRole(role)}
+                                onClick={() => !isActive && handleSwitchRole(r as UserRole)}
                                 disabled={switching || isActive}
                                 className={cn(
-                                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors min-h-0 text-left',
+                                  'w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all text-left text-sm min-h-0',
                                   isActive
-                                    ? 'bg-primary/5 cursor-default'
-                                    : 'hover:bg-surface cursor-pointer',
+                                    ? 'bg-green-50 border border-green-200 text-green-800 font-bold'
+                                    : 'hover:bg-surface text-fg-dark font-medium',
+                                  switching && !isActive && 'opacity-50'
                                 )}
                               >
-                                <div className={cn(
-                                  'w-8 h-8 rounded-lg flex items-center justify-center text-sm border',
-                                  isActive
-                                    ? `bg-gradient-to-br ${rc?.gradient ?? 'from-gray-400 to-gray-600'} text-white border-transparent shadow-sm`
-                                    : rc?.bg ?? 'bg-gray-50 border-gray-200'
-                                )}>
-                                  {rc?.emoji}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className={cn(
-                                    'text-sm font-medium',
-                                    isActive ? 'text-fg-dark font-semibold' : 'text-fg-dark',
-                                  )}>
-                                    {rc?.label}
-                                  </p>
-                                  {isActive && (
-                                    <p className="text-[11px] text-primary-dark font-medium">Role aktif saat ini</p>
-                                  )}
-                                </div>
-                                {isActive ? (
-                                  <span className="ml-auto text-primary-dark font-bold text-base">✓</span>
-                                ) : switching ? (
-                                  <div className="ml-auto w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                                ) : null}
+                                <span className="w-5 text-center font-extrabold text-base">
+                                  {isActive ? '✓' : '○'}
+                                </span>
+                                <span className="text-base">{rc.emoji}</span>
+                                <span className="flex-1">{rc.label}</span>
+                                {isActive && (
+                                  <span className="text-[10px] bg-green-200 text-green-800 px-1.5 py-0.5 rounded font-semibold">
+                                    Aktif
+                                  </span>
+                                )}
                               </button>
                             )
                           })}
                         </div>
-                      )}
+                      </div>
 
                       {/* Logout */}
                       <div className="p-2">
@@ -417,7 +282,7 @@ export function Navbar() {
                           <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-sm">
                             🚪
                           </div>
-                          Keluar dari Akun
+                          Keluar
                         </button>
                       </div>
                     </div>
@@ -485,7 +350,7 @@ export function Navbar() {
                 </Link>
               ))}
 
-              {!profile && (
+              {!user && (
                 <div className="pt-3 border-t border-border mt-3 flex flex-col gap-2">
                   <Link
                     href="/login"
@@ -504,62 +369,58 @@ export function Navbar() {
                 </div>
               )}
 
-              {profile && (
+              {user && (
                 <div className="pt-3 border-t border-border mt-3">
                   <div className="flex items-center gap-3 px-4 py-3 bg-surface rounded-btn mb-2">
                     <div className={cn(
                       'w-9 h-9 rounded-full bg-gradient-to-br text-white flex items-center justify-center font-bold',
-                      activeRoleConfig?.gradient
+                      activeRoleConfig.gradient
                     )}>
-                      {profile.full_name[0]?.toUpperCase()}
+                      {user.initial}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-fg-dark">{profile.full_name}</p>
-                      <p className={cn('text-xs', activeRoleConfig?.color)}>
-                        {activeRoleConfig?.emoji} {activeRoleConfig?.label}
+                      <p className="text-sm font-semibold text-fg-dark">{user.fullName}</p>
+                      <p className={cn('text-xs font-medium', activeRoleConfig.color)}>
+                        {activeRoleConfig.emoji} Role Aktif: {activeRoleConfig.label}
                       </p>
                     </div>
                   </div>
 
                   <Link
-                    href={activeRoleConfig?.href ?? '/'}
+                    href={activeRoleConfig.href}
                     onClick={() => setMobileOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 rounded-btn hover:bg-surface text-sm text-fg min-h-0"
+                    className="flex items-center gap-3 px-4 py-3 rounded-btn hover:bg-surface text-sm text-fg min-h-0 font-bold"
                   >
-                    📊 Dashboard Saya
+                    📊 Dashboard
                   </Link>
 
                   {/* Ganti Role — all roles with checkmark */}
-                  {profile.roles.length > 1 && (
-                    <div className="pt-2 pb-1">
-                      <p className="text-[10px] font-semibold text-fg/40 uppercase tracking-wider px-4 mb-1">
-                        Ganti Role
-                      </p>
-                      {profile.roles.map(role => {
-                        const rc = ROLE_CONFIG[role]
-                        const isActive = role === profile.role
-                        return (
-                          <button
-                            key={role}
-                            type="button"
-                            onClick={() => { if (!isActive) { setMobileOpen(false); handleSwitchRole(role) } }}
-                            disabled={switching || isActive}
-                            className={cn(
-                              'w-full flex items-center gap-3 px-4 py-3 rounded-btn text-sm min-h-0 text-left transition-colors',
-                              isActive ? 'bg-primary/5' : 'hover:bg-surface',
-                            )}
-                          >
-                            <span>{rc?.emoji}</span>
-                            <span className={isActive ? 'font-semibold text-fg-dark' : 'text-fg'}>{rc?.label}</span>
-                            {isActive && <span className="ml-auto text-primary-dark font-bold">✓</span>}
-                            {!isActive && switching && (
-                              <div className="ml-auto w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                            )}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
+                  <div className="pt-2 pb-1">
+                    <p className="text-[10px] font-semibold text-fg/40 uppercase tracking-wider px-4 mb-1">
+                      Ganti Role
+                    </p>
+                    {roles.map(r => {
+                      const rc = ROLE_CONFIG[r] ?? { emoji: '👤', label: r }
+                      const isActive = r === activeRole
+                      return (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => { if (!isActive) { setMobileOpen(false); handleSwitchRole(r as UserRole) } }}
+                          disabled={switching || isActive}
+                          className={cn(
+                            'w-full flex items-center gap-3 px-4 py-3 rounded-btn text-sm min-h-0 text-left transition-colors',
+                            isActive ? 'bg-green-50 text-green-800 font-bold' : 'hover:bg-surface text-fg',
+                          )}
+                        >
+                          <span className="w-4 font-bold">{isActive ? '✓' : '○'}</span>
+                          <span>{rc.emoji}</span>
+                          <span className="flex-1">{rc.label}</span>
+                          {isActive && <span className="text-[10px] bg-green-200 text-green-800 px-1.5 py-0.5 rounded font-semibold">Aktif</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
 
                   <button
                     type="button"

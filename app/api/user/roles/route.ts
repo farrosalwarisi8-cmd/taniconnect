@@ -1,6 +1,36 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, createAdminSupabaseClient } from '@/lib/supabase/server'
 
+export async function GET() {
+  try {
+    const supabase = await createServerSupabaseClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Tidak terotentikasi' }, { status: 401 })
+    }
+
+    const { data: profile, error: dbError } = await supabase
+      .from('profiles')
+      .select('role, roles')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (dbError) {
+      return NextResponse.json({ error: dbError.message }, { status: 500 })
+    }
+
+    const profileAny = profile as { role: string | null; roles: string[] | null } | null
+    const active_role = profileAny?.role ?? 'pembeli'
+    const roles = profileAny?.roles?.length ? profileAny.roles : [active_role]
+
+    return NextResponse.json({ roles, active_role })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Terjadi kesalahan pada server'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createServerSupabaseClient()

@@ -6,6 +6,7 @@ import { ToastProvider, useToast } from '@/components/ui/Toast'
 import { formatRupiah, generateIdempotencyKey, cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { estimateDistanceBetweenCities } from '@/lib/geo-distance'
+import { calculateShippingCost } from '@/lib/shipping'
 
 declare global {
   interface Window {
@@ -125,16 +126,22 @@ function CheckoutFlow(props: Props) {
     }
   }
 
-  // Calculate shipping cost & coverage check
+  // Calculate shipping cost & coverage check using reusable shipping module
   const selectedService = props.shippingServices.find(s => s.id === selectedServiceId)
   const distance = Number(distanceKm) || 0
   const maxCoverage = selectedService?.max_coverage_km ?? 50
-  const isOverCoverage = distance > maxCoverage
 
-  const calculatedShipping = selectedService
-    ? Math.max(distance * selectedService.price_per_km, selectedService.minimum_cost)
-    : 0
-  const shippingCost = distance > 0 && !isOverCoverage ? calculatedShipping : 0
+  const shippingCalc = selectedService
+    ? calculateShippingCost({
+        distanceKm: distance,
+        pricePerKm: selectedService.price_per_km,
+        minimumCost: selectedService.minimum_cost,
+        maxCoverageKm: maxCoverage,
+      })
+    : { finalCost: 0, rawCalculatedCost: 0, isMinimumApplied: false, isOverCoverage: false }
+
+  const shippingCost = shippingCalc.finalCost
+  const isOverCoverage = shippingCalc.isOverCoverage
 
   const subtotal = props.pricePerUnit * quantity
   const total    = subtotal + shippingCost

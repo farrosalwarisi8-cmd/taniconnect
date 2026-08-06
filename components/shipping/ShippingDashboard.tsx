@@ -14,6 +14,7 @@ interface ShippingServiceData {
   minimum_cost: number
   estimated_delivery: string
   is_active: boolean
+  max_coverage_km?: number
   created_at: string
 }
 
@@ -25,6 +26,9 @@ function ShippingDashboardInner() {
   const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
   const [editData, setEditData] = useState<ShippingServiceData | null>(null)
+  
+  // Confirmation Modal state
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
 
@@ -81,7 +85,7 @@ function ShippingDashboardInner() {
         throw new Error(err.error ?? 'Gagal mengubah status')
       }
 
-      toast(isActive ? 'Layanan diaktifkan' : 'Layanan dinonaktifkan', 'success')
+      toast(isActive ? 'Layanan berhasil diaktifkan' : 'Layanan berhasil dinonaktifkan', 'success')
       fetchServices()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Gagal mengubah status'
@@ -91,10 +95,16 @@ function ShippingDashboardInner() {
     }
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Yakin ingin menghapus layanan ini?')) return
+  const handleConfirmDelete = (id: string) => {
+    setConfirmDeleteId(id)
+  }
 
+  const executeDelete = async () => {
+    if (!confirmDeleteId) return
+    const id = confirmDeleteId
+    setConfirmDeleteId(null)
     setDeletingId(id)
+
     try {
       const res = await fetch(`/api/shipping-services/${id}`, {
         method: 'DELETE',
@@ -102,13 +112,13 @@ function ShippingDashboardInner() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        throw new Error(err.error ?? 'Gagal menghapus')
+        throw new Error(err.error ?? 'Gagal menghapus layanan')
       }
 
-      toast('Layanan berhasil dihapus', 'success')
+      toast('Layanan pengiriman berhasil dihapus', 'success')
       fetchServices()
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gagal menghapus'
+      const msg = err instanceof Error ? err.message : 'Gagal menghapus layanan'
       toast(msg, 'error')
     } finally {
       setDeletingId(null)
@@ -128,8 +138,8 @@ function ShippingDashboardInner() {
                 <div className="h-3 bg-gray-100 rounded w-32" />
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
-              {[1, 2, 3].map(j => (
+            <div className="grid grid-cols-4 gap-3">
+              {[1, 2, 3, 4].map(j => (
                 <div key={j} className="bg-gray-50 rounded-xl p-3">
                   <div className="h-3 bg-gray-200 rounded w-16 mb-2" />
                   <div className="h-5 bg-gray-200 rounded w-24" />
@@ -142,14 +152,16 @@ function ShippingDashboardInner() {
     )
   }
 
+  const serviceToDelete = services.find(s => s.id === confirmDeleteId)
+
   return (
     <>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Layanan Pengiriman</h2>
+          <h2 className="text-xl font-bold text-gray-900">Layanan Pengiriman Mandiri</h2>
           <p className="text-sm text-gray-500 mt-0.5">
-            Kelola jasa pengiriman untuk produk Anda
+            Atur sistem pengiriman internal untuk produk Anda sendiri
           </p>
         </div>
         <button
@@ -170,8 +182,8 @@ function ShippingDashboardInner() {
             Belum Ada Layanan Pengiriman
           </h3>
           <p className="text-sm text-gray-500 mb-6 max-w-sm mx-auto">
-            Buat layanan pengiriman agar pembeli dapat memesan produk Anda.
-            Tentukan harga per KM dan biaya minimum sesuai kebutuhan.
+            Buat layanan pengiriman internal agar pembeli dapat melakukan pemesanan produk Anda.
+            Tentukan tarif per KM dan biaya minimum secara mandiri.
           </p>
           <button
             type="button"
@@ -190,7 +202,7 @@ function ShippingDashboardInner() {
               service={service}
               onEdit={handleEdit}
               onToggle={handleToggle}
-              onDelete={handleDelete}
+              onDelete={handleConfirmDelete}
               isDeleting={deletingId === service.id}
               isToggling={togglingId === service.id}
             />
@@ -206,6 +218,51 @@ function ShippingDashboardInner() {
         editData={editData}
         toast={toast}
       />
+
+      {/* Confirmation Modal before delete */}
+      {confirmDeleteId && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 animate-fade-in"
+            onClick={() => setConfirmDeleteId(null)}
+          />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-scale-in">
+              <div className="text-center">
+                <div className="w-14 h-14 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
+                  🗑️
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 mb-1">
+                  Hapus Layanan Pengiriman?
+                </h3>
+                <p className="text-sm text-gray-500 mb-6">
+                  Apakah Anda yakin ingin menghapus layanan{' '}
+                  <span className="font-bold text-gray-800">
+                    &quot;{serviceToDelete?.service_name}&quot;
+                  </span>
+                  ? Tindakan ini tidak dapat dibatalkan.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteId(null)}
+                    className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-sm transition-colors min-h-0"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={executeDelete}
+                    className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl text-sm transition-colors min-h-0 shadow-sm"
+                  >
+                    Ya, Hapus
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </>
   )
 }
