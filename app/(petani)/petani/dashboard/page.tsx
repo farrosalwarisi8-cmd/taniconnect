@@ -1,17 +1,16 @@
 // app/(petani)/petani/dashboard/page.tsx
 //
-// Redesign: struktur & pola visual sama dengan dashboard penyedia
-// (bg-gradient header + decorative circles + 4 metric cards dengan
-// border-l-4 + Quick Actions gradient card + shortcut Pesan + Recent
-// Products + Tips card).
+// Layout mirror dashboard penyedia (header gradient + metric cards border-l-4 +
+// gradient CTA + shortcut Pesan + Recent items + Tips card),
+// TAPI semua fitur lama dipertahankan:
+//   - Quick Access grid 8 shortcut (dengan featured gradient untuk AI)
+//   - Empty state CTA "Siap panen?" kalau belum ada financial records
+//   - Info bar Harga Pangan di bawah
 //
-// Perbedaan dari penyedia:
-//   - Palette hijau/emerald (bukan blue/cyan)
-//   - Icon utama 🌾 (bukan 🚜)
-//   - Subtitle role "Petani"
-//   - Metric ke-4: produk aktif (bukan rata-rata sewa)
-//   - Recent items: produk (bukan alat/equipment)
-//   - CTA utama: "Jual Panen" ke /petani/produk/baru
+// Penambahan baru:
+//   - Shortcut Pesan Masuk dengan badge unread count
+//   - Recent Products grid
+//   - Tips card konsisten dengan penyedia
 
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -50,7 +49,7 @@ export default async function PetaniDashboardPage() {
       })
     | null
 
-  // ─── Ambil daftar produk milik petani ─────────────────────────────────────
+  // ─── Produk milik petani ──────────────────────────────────────────────────
   const { data: productsData, count: totalProducts } = await supabase
     .from('products')
     .select('id, name, price_per_unit, unit, stock_quantity, status, image_paths', { count: 'exact' })
@@ -71,7 +70,7 @@ export default async function PetaniDashboardPage() {
 
   const activeProducts = products.filter((p) => p.status === 'active').length
 
-  // ─── Ringkasan keuangan tahun berjalan ────────────────────────────────────
+  // ─── Keuangan tahun berjalan ──────────────────────────────────────────────
   const currentYear = new Date().getFullYear()
   const { data: recordsData } = await supabase
     .from('financial_records')
@@ -91,8 +90,7 @@ export default async function PetaniDashboardPage() {
     .reduce((s, r) => s + Number(r.total_amount), 0)
   const profit = totalIncome - totalExpense
 
-  // ─── Hitung unread messages untuk shortcut Pesan ──────────────────────────
-  // Pola 2-step yang aman dari picky foreign-key hint Supabase:
+  // ─── Unread messages untuk shortcut Pesan ─────────────────────────────────
   const { data: myConvos } = await supabase
     .from('conversations')
     .select('id')
@@ -122,7 +120,6 @@ export default async function PetaniDashboardPage() {
     return 'Selamat malam'
   })()
 
-  // ─── URL utility untuk thumbnail produk (sama seperti di halaman produk) ──
   const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
   const getFirstImageUrl = (imagePaths: string[] | null): string | null => {
     if (!imagePaths || imagePaths.length === 0) return null
@@ -132,11 +129,80 @@ export default async function PetaniDashboardPage() {
       : `${SUPABASE_URL}/storage/v1/object/public/product-images/${p}`
   }
 
+  // ─── Quick Access links — dipertahankan dari versi lama ───────────────────
+  // Note: 2 pertama (Tanya AI & Prediksi) featured pakai gradient color card,
+  // sisanya card putih polos. Ini pola dari desain lama yang harus dijaga.
+  const QUICK_LINKS = [
+    {
+      href: '/tanya-ai',
+      icon: '🤖',
+      label: 'Tanya AI',
+      desc: 'Konsultasi langsung',
+      gradient: 'from-violet-500 to-purple-600',
+      featured: true,
+    },
+    {
+      href: '/prediksi-harga',
+      icon: '🔮',
+      label: 'Prediksi Harga',
+      desc: 'Analisis komoditas',
+      gradient: 'from-blue-500 to-cyan-600',
+      featured: true,
+    },
+    {
+      href: '/petani/produk/baru',
+      icon: '🌾',
+      label: 'Jual Panen',
+      desc: 'Upload produk baru',
+      gradient: null,
+      featured: false,
+    },
+    {
+      href: '/petani/produk',
+      icon: '📦',
+      label: 'Produk Saya',
+      desc: 'Kelola listing',
+      gradient: null,
+      featured: false,
+    },
+    {
+      href: '/petani/keuangan',
+      icon: '📊',
+      label: 'Keuangan',
+      desc: 'Catat & analisis',
+      gradient: null,
+      featured: false,
+    },
+    {
+      href: '/petani/pengiriman',
+      icon: '🚚',
+      label: 'Pengiriman',
+      desc: 'Kelola jasa kirim',
+      gradient: null,
+      featured: false,
+    },
+    {
+      href: '/pembeli/marketplace',
+      icon: '🛒',
+      label: 'Marketplace',
+      desc: 'Lihat semua produk',
+      gradient: null,
+      featured: false,
+    },
+    {
+      href: '/harga-pangan',
+      icon: '💹',
+      label: 'Harga Pangan',
+      desc: 'Info pasar terkini',
+      gradient: null,
+      featured: false,
+    },
+  ]
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6">
-      {/* ─── Header — gradient hijau khas petani ────────────────────────────── */}
+      {/* ─── Header — gradient hijau, pola sama dengan penyedia ────────────── */}
       <div className="bg-gradient-to-br from-green-500 to-emerald-600 -m-4 sm:-m-6 lg:-m-8 mb-0 p-6 sm:p-8 rounded-b-3xl relative overflow-hidden">
-        {/* Decorative circles */}
         <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-white/10 -translate-y-1/3 translate-x-1/3" />
         <div className="absolute bottom-0 left-0 w-40 h-40 rounded-full bg-white/5 translate-y-1/2 -translate-x-1/4" />
         <div className="absolute top-4 right-8 text-6xl opacity-10 select-none">🌾</div>
@@ -231,7 +297,7 @@ export default async function PetaniDashboardPage() {
         </Card>
       </div>
 
-      {/* ─── Quick Actions — gradient card besar dengan CTA ────────────────── */}
+      {/* ─── Quick Actions — CTA gradient card besar ────────────────────────── */}
       <Card variant="elevated" padding="lg" className="!bg-gradient-to-br from-green-500 to-emerald-600 text-white">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0">
@@ -251,7 +317,7 @@ export default async function PetaniDashboardPage() {
         </div>
       </Card>
 
-      {/* ─── Shortcut Pesan — konsisten dengan penyedia ────────────────────── */}
+      {/* ─── Shortcut Pesan Masuk (BARU) ────────────────────────────────────── */}
       <Link href="/petani/pesan" className="block group">
         <Card
           variant="standard"
@@ -283,7 +349,103 @@ export default async function PetaniDashboardPage() {
         </Card>
       </Link>
 
-      {/* ─── Recent Products ────────────────────────────────────────────────── */}
+      {/* ─── Akses Cepat — DIPERTAHANKAN dari versi lama ────────────────────
+       *  8 shortcut cards: 2 pertama featured (Tanya AI + Prediksi Harga) dengan
+       *  gradient purple/blue, sisanya card putih polos. Layout responsive grid.
+       * ─────────────────────────────────────────────────────────────────────── */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-h4 text-fg-dark font-bold">⚡ Akses Cepat</h2>
+          <Link
+            href="/petani/profil"
+            className="text-green-600 font-semibold text-sm hover:underline min-h-0"
+          >
+            Profil →
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-3">
+          {QUICK_LINKS.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="group min-h-0"
+            >
+              {link.gradient ? (
+                <div
+                  className={`bg-gradient-to-br ${link.gradient} rounded-2xl p-4 h-full flex flex-col justify-between min-h-[100px] relative overflow-hidden shadow-md hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5`}
+                >
+                  <div className="absolute top-2 right-2 bg-white/20 backdrop-blur-sm rounded-full px-2 py-0.5 text-[10px] font-bold text-white">
+                    AI
+                  </div>
+                  <div className="text-3xl mb-2">{link.icon}</div>
+                  <div>
+                    <p className="font-bold text-white text-[14px] leading-tight">
+                      {link.label}
+                    </p>
+                    <p className="text-white/70 text-[11px] mt-0.5">
+                      {link.desc}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white border border-gray-100 rounded-2xl p-4 h-full flex flex-col justify-between min-h-[100px] shadow-sm hover:shadow-md hover:border-green-200 transition-all duration-200 hover:-translate-y-0.5">
+                  <div className="text-3xl mb-2">{link.icon}</div>
+                  <div>
+                    <p className="font-semibold text-fg-dark text-[14px] leading-tight">
+                      {link.label}
+                    </p>
+                    <p className="text-fg/60 text-[11px] mt-0.5">
+                      {link.desc}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* ─── Empty state CTA "Siap panen?" — DIPERTAHANKAN dari versi lama ──
+       *  Hanya tampil kalau belum ada financial records — mendorong petani baru
+       *  untuk mulai catat modal + eksplor fitur AI.
+       * ─────────────────────────────────────────────────────────────────────── */}
+      {records.length === 0 && (
+        <Card variant="standard" padding="none" className="overflow-hidden">
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-6 text-center">
+            <div className="text-5xl mb-3">🌱</div>
+            <h3 className="text-h4 text-fg-dark font-bold mb-2">
+              Siap panen?
+            </h3>
+            <p className="text-fg/70 text-body mb-4 max-w-md mx-auto">
+              Mulai catat modal & pendapatan agar dashboard bisa memberi
+              insight untukmu.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Link
+                href="/petani/keuangan"
+                className="inline-flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl px-5 py-3 text-sm transition-colors shadow-sm min-h-0"
+              >
+                📊 Catat Modal Pertama
+              </Link>
+              <Link
+                href="/tanya-ai"
+                className="inline-flex items-center justify-center gap-2 bg-white border-2 border-green-200 text-green-700 font-semibold rounded-xl px-5 py-3 text-sm hover:bg-green-50 transition-colors min-h-0"
+              >
+                🤖 Tanya AI Dulu
+              </Link>
+              <Link
+                href="/prediksi-harga"
+                className="inline-flex items-center justify-center gap-2 bg-white border-2 border-blue-200 text-blue-700 font-semibold rounded-xl px-5 py-3 text-sm hover:bg-blue-50 transition-colors min-h-0"
+              >
+                🔮 Prediksi Harga
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* ─── Recent Products (BARU) ─────────────────────────────────────────── */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-h4 text-fg-dark font-bold">🌾 Produk Terbaru</h2>
@@ -317,7 +479,6 @@ export default async function PetaniDashboardPage() {
               return (
                 <Card key={item.id} variant="standard" padding="md" hover>
                   <div className="flex items-start gap-3 mb-2">
-                    {/* Thumbnail */}
                     <div className="w-14 h-14 rounded-lg bg-gray-100 overflow-hidden flex items-center justify-center shrink-0">
                       {thumbUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -348,8 +509,7 @@ export default async function PetaniDashboardPage() {
                   <p className="text-body text-green-600 font-bold">
                     {formatRupiah(item.price_per_unit)}
                     <span className="text-caption text-fg/60 font-normal">
-                      {' '}
-                      / {item.unit}
+                      {' '}/ {item.unit}
                     </span>
                   </p>
                 </Card>
@@ -359,7 +519,30 @@ export default async function PetaniDashboardPage() {
         )}
       </div>
 
-      {/* ─── Tips Card — pola sama dengan penyedia ─────────────────────────── */}
+      {/* ─── Info Bar Harga Pangan — DIPERTAHANKAN dari versi lama ─────────── */}
+      <Card variant="standard" padding="md">
+        <div className="flex gap-3 items-center">
+          <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-lg shrink-0">
+            💹
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-fg-dark">
+              Info Harga Pangan Hari Ini
+            </p>
+            <p className="text-caption text-fg/60 hidden sm:block">
+              Data resmi Bapanas & PIHPS BI, gratis untuk umum
+            </p>
+          </div>
+          <Link
+            href="/harga-pangan"
+            className="text-green-700 font-semibold text-sm hover:underline shrink-0 min-h-0"
+          >
+            Lihat →
+          </Link>
+        </div>
+      </Card>
+
+      {/* ─── Tips Card (BARU) — konsisten dengan penyedia ──────────────────── */}
       <Card variant="standard" padding="lg" className="!bg-amber/5 border-l-4 !border-l-amber">
         <div className="flex gap-3">
           <div className="text-3xl shrink-0">💡</div>
