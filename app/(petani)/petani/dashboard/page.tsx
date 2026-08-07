@@ -1,12 +1,32 @@
+// app/(petani)/petani/dashboard/page.tsx
+//
+// Redesign: struktur & pola visual sama dengan dashboard penyedia
+// (bg-gradient header + decorative circles + 4 metric cards dengan
+// border-l-4 + Quick Actions gradient card + shortcut Pesan + Recent
+// Products + Tips card).
+//
+// Perbedaan dari penyedia:
+//   - Palette hijau/emerald (bukan blue/cyan)
+//   - Icon utama 🌾 (bukan 🚜)
+//   - Subtitle role "Petani"
+//   - Metric ke-4: produk aktif (bukan rata-rata sewa)
+//   - Recent items: produk (bukan alat/equipment)
+//   - CTA utama: "Jual Panen" ke /petani/produk/baru
+
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { formatRupiah, formatDateID, getDisplayName, getFirstName } from '@/lib/utils'
 import type { Tables } from '@/lib/supabase/client'
 
 export const dynamic = 'force-dynamic'
 
+export const metadata = {
+  title: 'Dashboard Petani',
+}
 
 export default async function PetaniDashboardPage() {
   const supabase = await createServerSupabaseClient()
@@ -26,22 +46,38 @@ export default async function PetaniDashboardPage() {
 
   const profile = profileData as
     | (Pick<Tables<'profiles'>, 'full_name' | 'is_verified' | 'city'> & {
-      province?: string | null
-    })
+        province?: string | null
+      })
     | null
 
+  // ─── Ambil daftar produk milik petani ─────────────────────────────────────
+  const { data: productsData, count: totalProducts } = await supabase
+    .from('products')
+    .select('id, name, price_per_unit, unit, stock_quantity, status, image_paths', { count: 'exact' })
+    .eq('seller_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(5)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const products = ((productsData ?? []) as any[]) as Array<{
+    id: string
+    name: string
+    price_per_unit: number
+    unit: string
+    stock_quantity: number
+    status: string
+    image_paths: string[] | null
+  }>
+
+  const activeProducts = products.filter((p) => p.status === 'active').length
+
+  // ─── Ringkasan keuangan tahun berjalan ────────────────────────────────────
   const currentYear = new Date().getFullYear()
   const { data: recordsData } = await supabase
     .from('financial_records')
     .select('record_type, total_amount')
     .eq('farmer_id', user.id)
     .eq('season_year', currentYear)
-
-  const { count: activeProductCount } = await supabase
-    .from('products')
-    .select('*', { count: 'exact', head: true })
-    .eq('seller_id', user.id)
-    .eq('status', 'active')
 
   const records = (recordsData ?? []) as Array<
     Pick<Tables<'financial_records'>, 'record_type' | 'total_amount'>
@@ -55,6 +91,29 @@ export default async function PetaniDashboardPage() {
     .reduce((s, r) => s + Number(r.total_amount), 0)
   const profit = totalIncome - totalExpense
 
+  // ─── Hitung unread messages untuk shortcut Pesan ──────────────────────────
+  // Pola 2-step yang aman dari picky foreign-key hint Supabase:
+  const { data: myConvos } = await supabase
+    .from('conversations')
+    .select('id')
+    .eq('seller_id', user.id)
+
+  const myConvoIds = (myConvos ?? []).map((c: { id: string }) => c.id)
+
+  let unreadMessages = 0
+  if (myConvoIds.length > 0) {
+    const { count } = await supabase
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .in('conversation_id', myConvoIds)
+      .eq('is_read', false)
+      .neq('sender_id', user.id)
+    unreadMessages = count ?? 0
+  }
+
+  const rawName = profile?.full_name?.trim() ?? ''
+  const firstName = getFirstName(rawName, 'Petani')
+
   const greeting = (() => {
     const h = new Date().getHours()
     if (h < 12) return 'Selamat pagi'
@@ -63,346 +122,259 @@ export default async function PetaniDashboardPage() {
     return 'Selamat malam'
   })()
 
-  const rawName = profile?.full_name?.trim() ?? ''
-  const firstName = getFirstName(rawName, 'Petani')
-
-  const QUICK_LINKS = [
-    {
-      href: '/tanya-ai',
-      icon: '🤖',
-      label: 'Tanya AI',
-      desc: 'Konsultasi langsung',
-      gradient: 'from-violet-500 to-purple-600',
-      featured: true,
-    },
-    {
-      href: '/prediksi-harga',
-      icon: '🔮',
-      label: 'Prediksi Harga',
-      desc: 'Analisis komoditas',
-      gradient: 'from-blue-500 to-cyan-600',
-      featured: true,
-    },
-    {
-      href: '/petani/produk/baru',
-      icon: '🌾',
-      label: 'Jual Panen',
-      desc: 'Upload produk baru',
-      gradient: null,
-      featured: false,
-    },
-    {
-      href: '/petani/produk',
-      icon: '📦',
-      label: 'Produk Saya',
-      desc: 'Kelola listing',
-      gradient: null,
-      featured: false,
-    },
-    {
-      href: '/petani/keuangan',
-      icon: '📊',
-      label: 'Keuangan',
-      desc: 'Catat & analisis',
-      gradient: null,
-      featured: false,
-    },
-    {
-      href: '/petani/pengiriman',
-      icon: '🚚',
-      label: 'Pengiriman',
-      desc: 'Kelola jasa kirim',
-      gradient: null,
-      featured: false,
-    },
-    {
-      href: '/pembeli/marketplace',
-      icon: '🛒',
-      label: 'Marketplace',
-      desc: 'Lihat semua produk',
-      gradient: null,
-      featured: false,
-    },
-    {
-      href: '/harga-pangan',
-      icon: '💹',
-      label: 'Harga Pangan',
-      desc: 'Info pasar terkini',
-      gradient: null,
-      featured: false,
-    },
-  ]
+  // ─── URL utility untuk thumbnail produk (sama seperti di halaman produk) ──
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const getFirstImageUrl = (imagePaths: string[] | null): string | null => {
+    if (!imagePaths || imagePaths.length === 0) return null
+    const p = imagePaths[0]
+    return p.startsWith('http')
+      ? p
+      : `${SUPABASE_URL}/storage/v1/object/public/product-images/${p}`
+  }
 
   return (
-    <main className="min-h-screen bg-[#FAFAF9] pb-24">
-      {/* ─── Hero Header ─────────────────────────────────────────────────────
-          FIX BUG (Tahap 1):
-          Sebelumnya lingkaran dekoratif bawah menjorok 96px keluar banner
-          (translate-y-1/2 dari lingkaran w-48/h-48 = 96px), sementara card
-          row di bawah cuma di-pull-up 40px (-mt-10). Ini menyebabkan strip
-          ~56px "bocor" di kiri bawah banner yang terlihat sebagai potongan
-          lingkaran samar di belakang card "Rp 0".
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+      {/* ─── Header — gradient hijau khas petani ────────────────────────────── */}
+      <div className="bg-gradient-to-br from-green-500 to-emerald-600 -m-4 sm:-m-6 lg:-m-8 mb-0 p-6 sm:p-8 rounded-b-3xl relative overflow-hidden">
+        {/* Decorative circles */}
+        <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-white/10 -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-40 h-40 rounded-full bg-white/5 translate-y-1/2 -translate-x-1/4" />
+        <div className="absolute top-4 right-8 text-6xl opacity-10 select-none">🌾</div>
 
-          Perbaikan:
-          - Lingkaran bawah: translate-y-1/2 → translate-y-1/4 (menjorok
-            hanya 48px, tetap fully-covered oleh card yang di-pull-up 40px
-            + shadow card menutupi sisa 8px)
-          - Lingkaran atas: translate-y-1/3 → translate-y-1/4 (konsistensi
-            skala visual, walau tidak overlap dengan card)
-          - pull-up card dipertahankan -mt-10 karena efek floating card
-            sudah OK
-      */}
-      <div className="gradient-dashboard relative overflow-hidden">
-        {/* Decorative elements — posisi diperkecil supaya tidak menjorok ke card row */}
-        <div className="absolute top-0 right-0 w-72 h-72 rounded-full bg-white/5 -translate-y-1/4 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 rounded-full bg-white/5 translate-y-1/4 -translate-x-1/4" />
-        <div className="absolute top-6 right-8 text-6xl opacity-10 select-none">
-          🌿
-        </div>
-
-        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-8 pb-20">
-          {/* Top bar: greeting + profile link */}
-          <div className="flex items-start justify-between gap-4 mb-3">
-            <div>
-              <p className="text-white/70 text-[13px] font-medium mb-0.5">
-                {greeting}, 👋
-              </p>
-              <h1
-                className="text-white leading-tight"
-                style={{
-                  fontFamily: "'Bricolage Grotesque', ui-sans-serif",
-                  fontSize: 'clamp(26px, 5.5vw, 42px)',
-                  fontWeight: 800,
-                  letterSpacing: '-0.02em',
-                }}
-              >
-                {getDisplayName(firstName, 'Petani')}
-              </h1>
-              <p className="text-white/60 text-[12px] mt-1">
-                {formatDateID(new Date(), 'full')}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {profile?.is_verified ? (
-                <Badge variant="verified" size="md">
-                  ✓ Terverifikasi
-                </Badge>
-              ) : (
-                <Badge variant="warning" size="md">
-                  ⏳ KYC menunggu
-                </Badge>
-              )}
-              <Link
-                href="/petani/profil"
-                className="w-11 h-11 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm flex items-center justify-center text-white font-bold text-lg transition-colors min-h-0 touch-target-exempt border border-white/30"
-                aria-label="Profil saya"
-                title="Lihat profil"
-              >
-                {getDisplayName(firstName, 'P')[0]?.toUpperCase() ?? 'P'}
-              </Link>
-            </div>
+        <div className="relative">
+          <p className="text-white/80 text-[13px] font-medium mb-1">{greeting}, 👋</p>
+          <h1
+            className="text-white leading-tight mb-2"
+            style={{
+              fontFamily: "'Bricolage Grotesque', ui-sans-serif",
+              fontSize: 'clamp(24px, 5vw, 40px)',
+              fontWeight: 800,
+              letterSpacing: '-0.02em',
+            }}
+          >
+            {getDisplayName(firstName, 'Petani')}
+          </h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-white/70 text-[13px]">
+              {formatDateID(new Date(), 'full')}
+            </p>
+            {profile?.is_verified ? (
+              <Badge variant="verified" size="sm">✓ Terverifikasi</Badge>
+            ) : (
+              <Badge variant="warning" size="sm">⏳ KYC menunggu</Badge>
+            )}
           </div>
-
-          {/* Location */}
           {(profile?.city || profile?.province) && (
-            <p className="text-white/60 text-[13px]">
+            <p className="text-white/60 text-[12px] mt-2">
               📍 {[profile?.city, profile?.province].filter(Boolean).join(', ')}
             </p>
           )}
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 -mt-10 space-y-6">
-        {/* Financial Summary Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 col-span-2 lg:col-span-1">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-xl bg-green-100 flex items-center justify-center text-sm">
-                💰
-              </div>
-              <p className="text-[12px] text-gray-500 font-medium">Pendapatan</p>
-            </div>
-            <p
-              className="text-[22px] font-extrabold text-green-700 leading-tight"
-              style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}
-            >
-              {formatRupiah(totalIncome)}
-            </p>
-            <p className="text-[11px] text-gray-400 mt-1">Tahun {currentYear}</p>
-          </div>
+      {/* ─── Metric Cards — pola sama persis dengan penyedia ───────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-2">
+        <Card variant="standard" padding="md" className="border-l-4 !border-l-green-500">
+          <p className="text-caption text-fg/60 mb-1">🌾 Produk</p>
+          <p
+            className="text-fg-dark font-extrabold"
+            style={{ fontFamily: "'Bricolage Grotesque', ui-sans-serif", fontSize: 32 }}
+          >
+            {totalProducts ?? 0}
+          </p>
+          <p className="text-caption text-green-600 mt-1">
+            {activeProducts} aktif
+          </p>
+        </Card>
 
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center text-sm">
-                📦
-              </div>
-              <p className="text-[12px] text-gray-500 font-medium">Modal</p>
-            </div>
-            <p
-              className="text-[22px] font-extrabold text-gray-700 leading-tight"
-              style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}
-            >
-              {formatRupiah(totalExpense)}
-            </p>
-            <p className="text-[11px] text-gray-400 mt-1">Pengeluaran</p>
-          </div>
+        <Card variant="standard" padding="md" className="border-l-4 !border-l-success">
+          <p className="text-caption text-fg/60 mb-1">💰 Pendapatan</p>
+          <p
+            className="text-success font-extrabold leading-tight"
+            style={{ fontFamily: "'Bricolage Grotesque', ui-sans-serif", fontSize: 22 }}
+          >
+            {formatRupiah(totalIncome)}
+          </p>
+          <p className="text-caption text-fg/60 mt-1">Tahun {currentYear}</p>
+        </Card>
 
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-            <div className="flex items-center gap-2 mb-2">
-              <div
-                className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm ${profit >= 0 ? 'bg-emerald-100' : 'bg-red-100'
-                  }`}
-              >
-                {profit >= 0 ? '📈' : '📉'}
-              </div>
-              <p className="text-[12px] text-gray-500 font-medium">Keuntungan</p>
-            </div>
-            <p
-              className={`text-[22px] font-extrabold leading-tight ${profit >= 0 ? 'text-emerald-700' : 'text-red-600'
-                }`}
-              style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}
-            >
-              {formatRupiah(profit)}
-            </p>
-            <p className="text-[11px] text-gray-400 mt-1">
-              {profit >= 0 ? 'Untung' : 'Rugi'}
+        <Card variant="standard" padding="md" className="border-l-4 !border-l-amber">
+          <p className="text-caption text-fg/60 mb-1">📦 Modal</p>
+          <p
+            className="text-amber font-extrabold leading-tight"
+            style={{ fontFamily: "'Bricolage Grotesque', ui-sans-serif", fontSize: 22 }}
+          >
+            {formatRupiah(totalExpense)}
+          </p>
+          <p className="text-caption text-fg/60 mt-1">Pengeluaran</p>
+        </Card>
+
+        <Card
+          variant="standard"
+          padding="md"
+          className={`border-l-4 ${profit >= 0 ? '!border-l-primary' : '!border-l-error'}`}
+        >
+          <p className="text-caption text-fg/60 mb-1">
+            {profit >= 0 ? '📈' : '📉'} Keuntungan
+          </p>
+          <p
+            className={`font-extrabold leading-tight ${
+              profit >= 0 ? 'text-primary-dark' : 'text-error'
+            }`}
+            style={{ fontFamily: "'Bricolage Grotesque', ui-sans-serif", fontSize: 22 }}
+          >
+            {formatRupiah(profit)}
+          </p>
+          <p className="text-caption text-fg/60 mt-1">
+            {profit >= 0 ? 'Untung' : 'Rugi'}
+          </p>
+        </Card>
+      </div>
+
+      {/* ─── Quick Actions — gradient card besar dengan CTA ────────────────── */}
+      <Card variant="elevated" padding="lg" className="!bg-gradient-to-br from-green-500 to-emerald-600 text-white">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <h2 className="text-h2 text-white font-bold mb-2">🌾 Mulai Jual Panen</h2>
+            <p className="text-white/90 text-body">
+              Upload produk panen milikmu dan raih pembeli dari seluruh Indonesia!
             </p>
           </div>
+          <Link href="/petani/produk/baru">
+            <Button
+              size="lg"
+              className="!bg-white !text-green-700 hover:!bg-green-50 shrink-0"
+            >
+              + Tambah Produk Baru
+            </Button>
+          </Link>
+        </div>
+      </Card>
 
+      {/* ─── Shortcut Pesan — konsisten dengan penyedia ────────────────────── */}
+      <Link href="/petani/pesan" className="block group">
+        <Card
+          variant="standard"
+          padding="md"
+          hover
+          className="border-l-4 !border-l-green-400 group-hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center text-xl shrink-0 group-hover:bg-green-100 transition-colors">
+              💬
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="font-bold text-fg-dark text-sm">Pesan Masuk</p>
+                {unreadMessages > 0 && (
+                  <span className="inline-flex items-center justify-center bg-[#ee4d2d] text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1">
+                    {unreadMessages > 99 ? '99+' : unreadMessages}
+                  </span>
+                )}
+              </div>
+              <p className="text-caption text-fg/60">
+                {unreadMessages > 0
+                  ? `${unreadMessages} pesan belum dibaca`
+                  : 'Lihat semua percakapan dengan pembeli'}
+              </p>
+            </div>
+            <span className="text-fg/30 text-lg shrink-0 group-hover:text-green-400 transition-colors">›</span>
+          </div>
+        </Card>
+      </Link>
+
+      {/* ─── Recent Products ────────────────────────────────────────────────── */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-h4 text-fg-dark font-bold">🌾 Produk Terbaru</h2>
           <Link
             href="/petani/produk"
-            className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 hover:border-green-200 hover:shadow-md transition-all group min-h-0"
+            className="text-green-600 font-semibold text-sm hover:underline min-h-0"
           >
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center text-sm">
-                🌾
-              </div>
-              <p className="text-[12px] text-gray-500 font-medium">Produk Aktif</p>
-            </div>
-            <p
-              className="text-[32px] font-extrabold text-blue-700 leading-tight"
-              style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}
-            >
-              {activeProductCount ?? 0}
-            </p>
-            <p className="text-[11px] text-gray-400 mt-1 group-hover:text-green-600 transition-colors">
-              Kelola produk →
-            </p>
+            Lihat semua →
           </Link>
         </div>
 
-        {/* Quick Access */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[16px] font-bold text-gray-900">Akses Cepat</h2>
-            <Link
-              href="/petani/profil"
-              className="text-[13px] text-green-600 font-semibold hover:underline min-h-0 touch-target-exempt"
-            >
-              Profil →
+        {products.length === 0 ? (
+          <Card variant="standard" padding="lg" className="text-center border-dashed">
+            <div className="text-5xl mb-3">🌱</div>
+            <h3 className="text-h4 text-fg-dark font-bold mb-2">
+              Belum ada produk terdaftar
+            </h3>
+            <p className="text-body text-fg/60 mb-4 max-w-md mx-auto">
+              Mulai upload hasil panen pertamamu untuk mulai
+              menerima pesanan dari pembeli seluruh Indonesia.
+            </p>
+            <Link href="/petani/produk/baru">
+              <Button size="lg">+ Upload Produk Pertama</Button>
             </Link>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
-            {QUICK_LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="group min-h-0"
-              >
-                {link.gradient ? (
-                  <div
-                    className={`bg-gradient-to-br ${link.gradient} rounded-2xl p-4 h-full flex flex-col justify-between min-h-[100px] relative overflow-hidden shadow-md hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5`}
-                  >
-                    <div className="absolute top-2 right-2 bg-white/20 backdrop-blur-sm rounded-full px-2 py-0.5 text-[10px] font-bold text-white">
-                      AI
+          </Card>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {products.map((item) => {
+              const thumbUrl = getFirstImageUrl(item.image_paths)
+              const isActive = item.status === 'active'
+              return (
+                <Card key={item.id} variant="standard" padding="md" hover>
+                  <div className="flex items-start gap-3 mb-2">
+                    {/* Thumbnail */}
+                    <div className="w-14 h-14 rounded-lg bg-gray-100 overflow-hidden flex items-center justify-center shrink-0">
+                      {thumbUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={thumbUrl}
+                          alt={item.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-2xl">🌾</span>
+                      )}
                     </div>
-                    <div className="text-3xl mb-2">{link.icon}</div>
-                    <div>
-                      <p className="font-bold text-white text-[14px] leading-tight">
-                        {link.label}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-fg-dark truncate">
+                        {getDisplayName(item.name, 'Produk')}
                       </p>
-                      <p className="text-white/70 text-[11px] mt-0.5">
-                        {link.desc}
+                      <p className="text-caption text-fg/60">
+                        Stok: {item.stock_quantity} {item.unit}
                       </p>
                     </div>
+                    <Badge
+                      variant={isActive ? 'success' : 'neutral'}
+                      size="sm"
+                    >
+                      {isActive ? '✓ Aktif' : '⏸ Nonaktif'}
+                    </Badge>
                   </div>
-                ) : (
-                  <div className="bg-white border border-gray-100 rounded-2xl p-4 h-full flex flex-col justify-between min-h-[100px] shadow-sm hover:shadow-md hover:border-green-200 transition-all duration-200 hover:-translate-y-0.5">
-                    <div className="text-3xl mb-2">{link.icon}</div>
-                    <div>
-                      <p className="font-semibold text-gray-900 text-[14px] leading-tight">
-                        {link.label}
-                      </p>
-                      <p className="text-gray-500 text-[11px] mt-0.5">
-                        {link.desc}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        {/* CTA jika belum ada data */}
-        {records.length === 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-6 text-center">
-              <div className="text-5xl mb-3 animate-float">🌱</div>
-              <h3 className="text-[18px] font-bold text-gray-900 mb-2">
-                Siap panen?
-              </h3>
-              <p className="text-gray-600 text-[14px] mb-4 max-w-xs mx-auto">
-                Mulai catat modal & pendapatan agar dashboard bisa memberi
-                insight untukmu.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <Link
-                  href="/petani/keuangan"
-                  className="inline-flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl px-5 py-3 text-[14px] transition-colors shadow-sm min-h-[48px]"
-                >
-                  📊 Catat Modal Pertama
-                </Link>
-                <Link
-                  href="/tanya-ai"
-                  className="inline-flex items-center justify-center gap-2 bg-white border-2 border-green-200 text-green-700 font-semibold rounded-xl px-5 py-3 text-[14px] hover:bg-green-50 transition-colors min-h-[48px]"
-                >
-                  🤖 Tanya AI Dulu
-                </Link>
-                <Link
-                  href="/prediksi-harga"
-                  className="inline-flex items-center justify-center gap-2 bg-white border-2 border-blue-200 text-blue-700 font-semibold rounded-xl px-5 py-3 text-[14px] hover:bg-blue-50 transition-colors min-h-[48px]"
-                >
-                  🔮 Prediksi Harga
-                </Link>
-              </div>
-            </div>
+                  <p className="text-body text-green-600 font-bold">
+                    {formatRupiah(item.price_per_unit)}
+                    <span className="text-caption text-fg/60 font-normal">
+                      {' '}
+                      / {item.unit}
+                    </span>
+                  </p>
+                </Card>
+              )
+            })}
           </div>
         )}
-
-        {/* Info Bar */}
-        <div className="flex gap-3 items-center bg-white border border-gray-100 rounded-2xl px-4 py-3 shadow-sm">
-          <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-lg shrink-0">
-            💹
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold text-gray-900">
-              Info Harga Pangan Hari Ini
-            </p>
-            <p className="text-[12px] text-gray-500 hidden sm:block">
-              Data resmi Bapanas & PIHPS BI, gratis untuk umum
-            </p>
-          </div>
-          <Link
-            href="/harga-pangan"
-            className="text-green-700 font-semibold text-[13px] hover:underline shrink-0 min-h-0 touch-target-exempt"
-          >
-            Lihat →
-          </Link>
-        </div>
       </div>
-    </main>
+
+      {/* ─── Tips Card — pola sama dengan penyedia ─────────────────────────── */}
+      <Card variant="standard" padding="lg" className="!bg-amber/5 border-l-4 !border-l-amber">
+        <div className="flex gap-3">
+          <div className="text-3xl shrink-0">💡</div>
+          <div>
+            <p className="font-bold text-fg-dark mb-1">Tips Petani Sukses</p>
+            <ul className="text-caption text-fg/70 space-y-1">
+              <li>• Upload foto hasil panen yang jelas dan menarik</li>
+              <li>• Tetapkan harga kompetitif sesuai kondisi pasar</li>
+              <li>• Verifikasi KYC untuk mendapat kepercayaan pembeli</li>
+              <li>• Balas pesan dan pesanan pembeli dalam 24 jam</li>
+              <li>• Catat modal & pendapatan agar keuangan terpantau</li>
+            </ul>
+          </div>
+        </div>
+      </Card>
+    </div>
   )
 }
