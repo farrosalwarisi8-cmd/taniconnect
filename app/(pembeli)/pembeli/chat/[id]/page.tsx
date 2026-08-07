@@ -1,147 +1,39 @@
-'use client'
+// app/(pembeli)/pembeli/chat/[id]/page.tsx
+//
+// ⚠️  ROUTE INI SUDAH TIDAK AKTIF — JANGAN TAMBAH FITUR DI SINI
+//
+// Riwayat:
+//   Route ini adalah sistem chat versi lama yang menggunakan seller_id
+//   langsung sebagai "conversation id". Akibatnya semua pembeli yang chat
+//   ke penjual yang sama akan masuk thread yang sama — bug privasi serius.
+//
+// Pengganti:
+//   Sistem chat yang benar ada di /chat/[conversation_id] dimana
+//   conversation_id adalah UUID unik dari tabel `conversations`
+//   (satu row per kombinasi buyer + seller + product).
+//
+// Entry point yang benar:
+//   Tombol "💬 Chat" di halaman produk (/pembeli/produk/[id]) sekarang
+//   memakai <ChatWithSellerButton> yang POST ke /api/chat/conversations
+//   untuk find-or-create, lalu redirect ke /chat/{conversation_id}.
+//
+// Kenapa tidak dihapus:
+//   Redirect dipertahankan untuk backward compatibility — kalau ada user
+//   yang punya bookmark URL lama atau menerima link lama via notifikasi,
+//   mereka tidak akan kena halaman 404 mentah.
+//
+// Kapan boleh dihapus:
+//   Setelah dipastikan tidak ada traffic organik ke route ini
+//   (cek Supabase Analytics / Vercel logs selama 30 hari).
 
-import { useEffect, useState, useRef } from 'react'
-import { use } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
+import { redirect } from 'next/navigation'
 
-interface Message {
-  id: string
-  created_at: string
-  conversation_id: string
-  sender_id: string
-  text: string
-  image_url: string | null
-  is_read: boolean
-}
-
-interface Props {
-  params: Promise<{ id: string }>
-}
-
-export default function ChatPage({ params }: Props) {
-  const { id: conversationId } = use(params)
-  const supabase = createClient()
-
-  const [messages, setMessages]   = useState<Message[]>([])
-  const [inputText, setInputText] = useState('')
-  const [userId, setUserId]       = useState<string | null>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    // 1. Get current user
-    const loadUser = async () => {
-      const { data } = await supabase.auth.getUser()
-      setUserId(data.user?.id ?? null)
-    }
-    loadUser()
-
-    // 2. Fetch history
-    const fetchMessages = async () => {
-      const { data } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true })
-      setMessages((data as Message[]) || [])
-    }
-    fetchMessages()
-
-    // 3. Realtime Subscription
-    const channel = supabase
-      .channel(`chat:${conversationId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        (payload: { new: Message }) => {
-          setMessages(prev => [...prev, payload.new])
-        }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [conversationId, supabase])
-
-  useEffect(() => {
-    scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
-  const sendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!inputText.trim() || !userId) return
-
-    await supabase.from('messages').insert({
-      conversation_id: conversationId,
-      sender_id:       userId,
-      text:            inputText.trim(),
-    })
-    setInputText('')
-  }
-
-  return (
-    <main className="flex flex-col h-screen bg-surface-light">
-      {/* Header */}
-      <header className="p-4 bg-white border-b border-border">
-        <h1 className="text-h4 font-semibold text-fg-dark">Chat</h1>
-      </header>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.length === 0 && (
-          <div className="text-center text-fg/60 py-8">
-            <p className="text-body">Belum ada pesan. Mulai percakapan!</p>
-          </div>
-        )}
-
-        {messages.map(m => {
-          const isMine = m.sender_id === userId
-          return (
-            <div
-              key={m.id}
-              className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`p-3 rounded-lg max-w-[70%] break-words ${
-                  isMine
-                    ? 'bg-primary text-white rounded-br-none'
-                    : 'bg-white border border-border rounded-bl-none'
-                }`}
-              >
-                <p className="text-body">{m.text}</p>
-                <p className={`text-caption mt-1 ${isMine ? 'text-white/70' : 'text-fg/50'}`}>
-                  {new Date(m.created_at).toLocaleTimeString('id-ID', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </p>
-              </div>
-            </div>
-          )
-        })}
-        <div ref={scrollRef} />
-      </div>
-
-      {/* Input */}
-      <form onSubmit={sendMessage} className="p-4 bg-white border-t border-border flex gap-2">
-        <div className="flex-1">
-          <Input
-            value={inputText}
-            onChange={e => setInputText(e.target.value)}
-            placeholder="Tulis pesan..."
-          />
-        </div>
-        <Button type="submit" disabled={!inputText.trim()}>
-          Kirim
-        </Button>
-      </form>
-    </main>
-  )
+// Params masih diterima agar Next.js tidak error saat build,
+// tapi tidak dipakai karena kita tidak bisa resolve conversation_id
+// yang valid dari seller_id tanpa tahu siapa buyernya
+// (info buyer hanya tersedia di client via session, bukan di server component ini).
+export default function OldChatRedirectPage() {
+  // Arahkan ke marketplace. User bisa mulai chat yang benar dari
+  // halaman detail produk manapun menggunakan tombol "💬 Chat".
+  redirect('/pembeli/marketplace')
 }

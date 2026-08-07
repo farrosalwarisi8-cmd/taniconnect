@@ -1,3 +1,5 @@
+// app/(penyedia)/penyedia/_components/PenyediaSidebar.tsx
+
 'use client'
 
 import Link from 'next/link'
@@ -8,10 +10,14 @@ import { cn, normalizeUserRole } from '@/lib/utils'
 import { useAuth } from '@/context/AuthContext'
 import type { UserRole } from '@/lib/supabase/client'
 
+// ─── Ditambahkan: item "Pesan" setelah "Booking Masuk" ────────────────────────
+// Posisi: antara booking dan pengiriman, meniru urutan yang logis dari alur kerja
+// penyedia (terima booking → baca pesan pembeli → atur pengiriman)
 const NAV_ITEMS = [
   { href: '/penyedia/dashboard',  icon: '📊', label: 'Dashboard'     },
   { href: '/penyedia/alat',       icon: '🚜', label: 'Alat Saya'     },
   { href: '/penyedia/booking',    icon: '📥', label: 'Booking Masuk' },
+  { href: '/penyedia/pesan',      icon: '💬', label: 'Pesan'         }, // ← BARU
   { href: '/penyedia/pengiriman', icon: '🚚', label: 'Pengiriman'    },
   { href: '/penyedia/profil',     icon: '👤', label: 'Profil'        },
 ]
@@ -50,8 +56,6 @@ export function PenyediaSidebar({ providerName, userRoles = [] }: Props) {
       setSwitching(false)
     }
   }
-
-  const otherRoles = userRoles.filter(r => r !== 'penyedia_alat')
 
   const SidebarContent = () => (
     <aside
@@ -100,7 +104,7 @@ export function PenyediaSidebar({ providerName, userRoles = [] }: Props) {
         </div>
       </div>
 
-      {/* Nav */}
+      {/* Nav — semua item dari NAV_ITEMS, termasuk Pesan yang baru */}
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto" aria-label="Menu penyedia">
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
@@ -171,7 +175,9 @@ export function PenyediaSidebar({ providerName, userRoles = [] }: Props) {
                   <span>{rc.emoji}</span>
                   <span className={isActive ? 'font-semibold' : ''}>{rc.label}</span>
                   {isActive && <span className="ml-auto text-blue-600 font-bold">✓</span>}
-                  {!isActive && switching && <div className="ml-auto w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />}
+                  {!isActive && switching && (
+                    <div className="ml-auto w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  )}
                 </button>
               )
             })}

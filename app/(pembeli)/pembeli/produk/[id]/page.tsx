@@ -1,8 +1,11 @@
+// app/(pembeli)/pembeli/produk/[id]/page.tsx
+
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { ProductImageGallery } from './_components/ProductImageGallery'
 import { CheckoutClient } from './_components/CheckoutClient'
+import { ChatWithSellerButton } from './_components/ChatWithSellerButton'
 import { formatRupiah, CATEGORY_LABELS, getDisplayName, getInitials } from '@/lib/utils'
 
 interface Props {
@@ -303,13 +306,26 @@ export default async function ProductDetailPage({ params }: Props) {
                   )}
                 </div>
               </div>
+              {/*
+               * SEBELUM (dihapus — bug arsitektur: semua pembeli masuk thread
+               * yang sama karena pakai seller.id langsung sebagai conversation id):
+               *
+               * <Link
+               *   href={`/pembeli/chat/${seller.id}`}
+               *   className="px-4 py-2 border border-[#ee4d2d] ..."
+               * >
+               *   💬 Chat
+               * </Link>
+               *
+               * SESUDAH: ChatWithSellerButton melakukan POST ke
+               * /api/chat/conversations (find-or-create per buyer+seller+product)
+               * lalu redirect ke /chat/{conversation_id} yang unik per pasangan.
+               */}
               <div className="flex gap-2 shrink-0">
-                <Link
-                  href={`/pembeli/chat/${seller.id}`}
-                  className="px-4 py-2 border border-[#ee4d2d] text-[#ee4d2d] text-sm font-medium rounded-sm hover:bg-orange-50 transition-colors min-h-0"
-                >
-                  💬 Chat
-                </Link>
+                <ChatWithSellerButton
+                  sellerId={seller.id}
+                  productId={product.id}
+                />
                 <Link
                   href={`/pembeli/penjual/${seller.id}`}
                   className="px-4 py-2 bg-[#ee4d2d] text-white text-sm font-medium rounded-sm hover:bg-[#d73211] transition-colors min-h-0"

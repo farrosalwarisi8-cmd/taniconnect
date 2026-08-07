@@ -1,3 +1,5 @@
+// app/(penyedia)/penyedia/dashboard/page.tsx
+
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
@@ -64,6 +66,21 @@ export default async function PenyediaDashboardPage() {
       'equipment_id',
       equipment.length > 0 ? equipment.map((e) => e.id) : ['00000000-0000-0000-0000-000000000000']
     )
+
+  // ─── Hitung unread messages untuk badge di shortcut Pesan ─────────────────
+  // Query ringan: hanya count, tidak perlu ambil content sama sekali
+  const { count: unreadMessages } = await supabase
+    .from('messages')
+    .select(
+      `
+      id,
+      conversations!inner (seller_id)
+    `,
+      { count: 'exact', head: true }
+    )
+    .eq('is_read', false)
+    .neq('sender_id', user.id)
+    .eq('conversations.seller_id', user.id)
 
   const firstName = profile?.full_name?.split(' ')[0] ?? 'Penyedia'
 
@@ -199,6 +216,44 @@ export default async function PenyediaDashboardPage() {
           </Link>
         </div>
       </Card>
+
+      {/* ─── Shortcut Pesan ─────────────────────────────────────────────────────
+       *  Disisipkan di sini — setelah Quick Actions, sebelum Recent Equipment —
+       *  supaya penyedia langsung lihat ada pesan masuk dari pembeli tanpa harus
+       *  buka sidebar dulu. Hanya tampil kalau ada unread > 0, atau selalu
+       *  tampil sebagai navigasi cepat.
+       * ─────────────────────────────────────────────────────────────────────── */}
+      <Link href="/penyedia/pesan" className="block group">
+        <Card
+          variant="standard"
+          padding="md"
+          hover
+          className="border-l-4 !border-l-blue-400 group-hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-xl shrink-0 group-hover:bg-blue-100 transition-colors">
+              💬
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="font-bold text-fg-dark text-sm">Pesan Masuk</p>
+                {/* Badge unread — hanya muncul kalau ada pesan belum dibaca */}
+                {(unreadMessages ?? 0) > 0 && (
+                  <span className="inline-flex items-center justify-center bg-[#ee4d2d] text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1">
+                    {(unreadMessages ?? 0) > 99 ? '99+' : unreadMessages}
+                  </span>
+                )}
+              </div>
+              <p className="text-caption text-fg/60">
+                {(unreadMessages ?? 0) > 0
+                  ? `${unreadMessages} pesan belum dibaca`
+                  : 'Lihat semua percakapan dengan pembeli'}
+              </p>
+            </div>
+            <span className="text-fg/30 text-lg shrink-0 group-hover:text-blue-400 transition-colors">›</span>
+          </div>
+        </Card>
+      </Link>
 
       {/* Recent Equipment */}
       <div>
