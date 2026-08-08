@@ -86,7 +86,7 @@ export default async function PesananPage({ searchParams }: Props) {
   return (
     <main className="min-h-screen bg-[#FAFAF9] pb-28">
       {/* Header */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-30 shadow-sm">
+      <div className="bg-white border-b border-gray-100 sticky top-[52px] z-30 shadow-sm">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-5 pb-0">
           <div className="flex items-center gap-3 mb-4">
             <Link

@@ -157,7 +157,7 @@ export default async function PenjualPage({ params }: Props) {
   return (
     <main className="min-h-screen bg-[#f5f5f5] pb-24 lg:pb-8">
       {/* Breadcrumb */}
-      <header className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm">
+      <header className="sticky top-[52px] z-30 bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-[1200px] mx-auto px-4 py-3 flex items-center gap-3">
           <Link
             href="/pembeli/marketplace"
