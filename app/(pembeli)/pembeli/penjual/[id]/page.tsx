@@ -1,221 +1,284 @@
+// app/(pembeli)/pembeli/penjual/[id]/page.tsx
+//
+// Halaman "Kunjungi Toko" — menampilkan profil penjual + semua produknya.
+// Bisa untuk role petani (jual hasil panen) atau penyedia_alat (jual alat).
+//
+// Struktur design: mirror gaya Shopee shop page:
+//   - Header toko: avatar + nama + rating + badge + tombol Chat/Kunjungi
+//   - Info bar: total produk, pengikut (kalau ada), lokasi, join date
+//   - Grid produk aktif dari penjual ini
+
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { Badge } from '@/components/ui/Badge'
-import { formatRupiah, formatDateID, CATEGORY_LABELS, getDisplayName, getInitials, getFirstName } from '@/lib/utils'
-import type { Metadata } from 'next'
+import { formatRupiah, formatDateID, CATEGORY_LABELS, getDisplayName, getInitials } from '@/lib/utils'
+import { ChatWithSellerButton } from '@/app/(pembeli)/pembeli/produk/[id]/_components/ChatWithSellerButton'
 
 interface Props {
   params: Promise<{ id: string }>
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+type SellerProfile = {
+  id: string
+  full_name: string | null
+  role: string
+  city: string | null
+  province: string | null
+  rating_avg: number | null
+  rating_count: number | null
+  is_verified: boolean
+  created_at: string
+  bio?: string | null
+}
+
+type ProductRow = {
+  id: string
+  name: string
+  category: string
+  price_per_unit: number
+  unit: string
+  stock_quantity: number
+  image_paths: string[] | null
+  city: string | null
+  is_auction: boolean
+}
+
+export default async function PenjualPage({ params }: Props) {
   const { id } = await params
   const supabase = await createServerSupabaseClient()
-  const { data, error } = await supabase
+
+  // Fetch profil penjual
+  const { data: sellerData, error: sellerError } = await supabase
     .from('profiles')
-    .select('full_name, city')
+    .select('id, full_name, role, city, province, rating_avg, rating_count, is_verified, created_at, bio')
     .eq('id', id)
     .maybeSingle()
 
-  if (error) {
-    throw new Error(error.message)
-  }
+  if (sellerError || !sellerData) notFound()
 
-  return {
-    title: data ? `${getDisplayName(data.full_name, 'Penjual')} — Profil Penjual` : 'Profil Penjual',
-  }
-}
+  const seller = sellerData as SellerProfile
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
-
-function getImageUrl(path: string): string {
-  if (path.startsWith('http')) return path
-  return `${SUPABASE_URL}/storage/v1/object/public/product-images/${path}`
-}
-
-export default async function SellerProfilePage({ params }: Props) {
-  const { id } = await params
-  const supabase = await createServerSupabaseClient()
-
-  const { data: seller, error: sellerError } = await supabase
-    .from('profiles')
-    .select('id, full_name, city, province, bio, is_verified, rating_avg, rating_count, created_at, avatar_storage_path')
-    .eq('id', id)
-    .eq('role', 'petani')
-    .maybeSingle()
-
-  if (sellerError || !seller) notFound()
-
-  const { data: products } = await supabase
+  // Fetch produk aktif dari penjual ini
+  const { data: productsData, count: totalProducts } = await supabase
     .from('products')
-    .select('id, name, category, price_per_unit, unit, stock_quantity, image_paths, city, is_auction, current_bid')
+    .select('id, name, category, price_per_unit, unit, stock_quantity, image_paths, city, is_auction', { count: 'exact' })
     .eq('seller_id', id)
     .eq('status', 'active')
-    .gt('stock_quantity', 0)
     .order('created_at', { ascending: false })
-    .limit(20)
 
-  const initials = getInitials(seller.full_name, 'P')
+  const products = (productsData ?? []) as ProductRow[]
 
-  const memberSince = seller.created_at
-    ? formatDateID(seller.created_at, 'long')
-    : '—'
+  // Helper thumbnail URL
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const getFirstImageUrl = (imagePaths: string[] | null): string | null => {
+    if (!imagePaths || imagePaths.length === 0) return null
+    const p = imagePaths[0]
+    return p.startsWith('http')
+      ? p
+      : `${SUPABASE_URL}/storage/v1/object/public/product-images/${p}`
+  }
 
-  const rating = seller.rating_avg ? Number(seller.rating_avg).toFixed(1) : null
-  const activeProductCount = (products ?? []).length
+  const sellerName = getDisplayName(seller.full_name, 'Penjual')
+  const ratingAvg = seller.rating_avg ?? 0
+  const ratingCount = seller.rating_count ?? 0
+  const joinDate = new Date(seller.created_at)
+  const joinedYear = joinDate.getFullYear()
+  const joinedMonth = joinDate.toLocaleDateString('id-ID', { month: 'long' })
+
+  // Role label
+  const roleLabel = seller.role === 'petani'
+    ? '🌾 Petani'
+    : seller.role === 'penyedia_alat'
+    ? '🚜 Penyedia Alat'
+    : '👤 Penjual'
+
+  const roleGradient = seller.role === 'petani'
+    ? 'from-green-500 to-emerald-600'
+    : seller.role === 'penyedia_alat'
+    ? 'from-blue-500 to-cyan-600'
+    : 'from-gray-500 to-gray-600'
 
   return (
-    <main className="min-h-screen bg-[#FAFAF9] pb-24">
-      {/* Header */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
+    <main className="min-h-screen bg-[#f5f5f5] pb-24 lg:pb-8">
+      {/* Breadcrumb / Header */}
+      <header className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-[1200px] mx-auto px-4 py-3 flex items-center gap-3">
           <Link
             href="/pembeli/marketplace"
-            className="w-11 h-11 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-700 font-semibold transition-colors min-h-0 touch-target-exempt text-lg"
-            aria-label="Kembali ke marketplace"
+            className="text-gray-500 hover:text-[#ee4d2d] text-sm flex items-center gap-1 min-h-0"
           >
-            ←
+            ← Marketplace
           </Link>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-gray-900 text-[15px] truncate">{getDisplayName(seller.full_name, 'Penjual')}</p>
-            <p className="text-[12px] text-gray-500">Profil Penjual</p>
-          </div>
+          <span className="text-gray-300">/</span>
+          <span className="text-sm text-gray-600 truncate">Toko {sellerName}</span>
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {/* Seller Hero Card */}
-        <div className="relative bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 rounded-3xl overflow-hidden p-6 sm:p-8">
-          <div className="blob-bg w-48 h-48 bg-white top-[-30px] right-[-20px]" />
-          <div className="blob-bg w-32 h-32 bg-green-300 bottom-[-15px] left-[10px]" />
+      <div className="max-w-[1200px] mx-auto px-4 py-4 space-y-4">
+        {/* ─── Shop Header Card ────────────────────────────────────────── */}
+        <div className="bg-white rounded-sm shadow-sm overflow-hidden">
+          {/* Banner gradient */}
+          <div className={`h-24 sm:h-32 bg-gradient-to-r ${roleGradient} relative`}>
+            <div className="absolute top-4 right-8 text-6xl opacity-10 select-none">
+              {seller.role === 'petani' ? '🌾' : seller.role === 'penyedia_alat' ? '🚜' : '🏪'}
+            </div>
+          </div>
 
-          <div className="relative flex items-start gap-5">
-            <div className="w-20 h-20 rounded-2xl bg-white/25 backdrop-blur-sm flex items-center justify-center text-white font-bold text-3xl border-2 border-white/30 shrink-0">
-              {initials}
+          {/* Info */}
+          <div className="p-4 lg:p-6 flex flex-col sm:flex-row gap-4 -mt-12 sm:-mt-16 relative">
+            {/* Avatar */}
+            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-gradient-to-br from-green-400 to-green-600 text-white flex items-center justify-center font-bold text-3xl shrink-0 border-4 border-white shadow-lg">
+              {getInitials(seller.full_name, 'P')}
             </div>
 
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-3 flex-wrap">
-                <h1 className="text-white font-bold text-xl sm:text-2xl leading-tight">
-                  {getDisplayName(seller.full_name, 'Penjual')}
-                </h1>
-                {seller.is_verified && (
-                  <span className="bg-white/25 text-white text-[11px] font-semibold px-3 py-1 rounded-full flex items-center gap-1">
-                    ✓ Terverifikasi
-                  </span>
-                )}
+            <div className="flex-1 min-w-0 sm:pt-14">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h1 className="text-xl lg:text-2xl font-bold text-gray-900 truncate">
+                      {sellerName}
+                    </h1>
+                    {seller.is_verified && (
+                      <span className="bg-blue-50 text-blue-600 text-[11px] font-semibold px-2 py-0.5 rounded border border-blue-100">
+                        ✓ Terverifikasi
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap mt-1">
+                    <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 text-xs font-medium px-2 py-1 rounded">
+                      {roleLabel}
+                    </span>
+                    {(seller.city || seller.province) && (
+                      <span className="text-xs text-gray-500">
+                        📍 {[seller.city, seller.province].filter(Boolean).join(', ')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Chat button */}
+                <div className="shrink-0">
+                  <ChatWithSellerButton
+                    sellerId={seller.id}
+                    productId=""
+                  />
+                </div>
               </div>
 
-              {(seller.city || seller.province) && (
-                <p className="text-white/80 text-[14px] mt-1.5">
-                  📍 {[seller.city, seller.province].filter(Boolean).join(', ')}
-                </p>
-              )}
-              <p className="text-white/60 text-[12px] mt-1">Bergabung {memberSince}</p>
-
               {seller.bio && (
-                <p className="text-white/80 text-[13px] mt-3 leading-relaxed italic">
-                  &ldquo;{seller.bio}&rdquo;
+                <p className="text-sm text-gray-600 mt-2 line-clamp-2">
+                  {seller.bio}
                 </p>
               )}
             </div>
           </div>
 
           {/* Stats bar */}
-          <div className="relative grid grid-cols-3 gap-4 mt-6 pt-5 border-t border-white/20">
-            <div className="text-center">
-              <p className="text-white font-bold text-2xl" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
-                {activeProductCount}
-              </p>
-              <p className="text-white/70 text-[12px] mt-0.5">Produk Aktif</p>
+          <div className="border-t border-gray-100 px-4 lg:px-6 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3 bg-gray-50/50">
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Produk</p>
+              <p className="text-lg font-bold text-gray-900">{totalProducts ?? 0}</p>
             </div>
-            <div className="text-center border-x border-white/20">
-              <p className="text-white font-bold text-2xl" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
-                {rating ?? '—'}
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Rating</p>
+              <p className="text-lg font-bold text-[#ee4d2d]">
+                {ratingAvg > 0 ? ratingAvg.toFixed(1) : '-'}
+                <span className="text-xs text-gray-400 font-normal ml-1">
+                  ({ratingCount})
+                </span>
               </p>
-              <p className="text-white/70 text-[12px] mt-0.5">Rating ⭐</p>
             </div>
-            <div className="text-center">
-              <p className="text-white font-bold text-2xl" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
-                {seller.rating_count ?? 0}
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Bergabung</p>
+              <p className="text-sm font-semibold text-gray-800">
+                {joinedMonth} {joinedYear}
               </p>
-              <p className="text-white/70 text-[12px] mt-0.5">Ulasan</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Status</p>
+              <p className="text-sm font-semibold text-green-600">🟢 Aktif</p>
             </div>
           </div>
         </div>
 
-        {/* Products Grid */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[18px] font-bold text-gray-900">
-              Produk dari {getFirstName(seller.full_name, 'Penjual')}
+        {/* ─── Produk Grid ─────────────────────────────────────────────── */}
+        <div className="bg-white rounded-sm shadow-sm p-4 lg:p-6">
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
+            <h2 className="text-lg font-medium text-gray-900 uppercase tracking-wide">
+              Produk Toko ({totalProducts ?? 0})
             </h2>
-            <span className="text-[13px] text-gray-500">{activeProductCount} produk</span>
           </div>
 
-          {(products ?? []).length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center shadow-sm">
-              <div className="text-5xl mb-4">🌱</div>
-              <h3 className="font-bold text-gray-900 text-[16px] mb-2">Belum ada produk aktif</h3>
-              <p className="text-gray-500 text-[14px]">Penjual ini belum memiliki produk yang tersedia saat ini.</p>
-              <Link
-                href="/pembeli/marketplace"
-                className="inline-block mt-4 px-5 py-2.5 bg-green-600 text-white font-semibold text-[14px] rounded-xl hover:bg-green-700 transition-colors min-h-0 touch-target-exempt"
-              >
-                Lihat Produk Lain →
-              </Link>
+          {products.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-5xl mb-3">📦</div>
+              <p className="text-gray-500 font-medium">
+                Belum ada produk aktif di toko ini
+              </p>
+              <p className="text-sm text-gray-400 mt-1">
+                Cek kembali nanti atau hubungi penjual via Chat
+              </p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {(products ?? []).map((product: any) => {
-                const displayPrice = product.is_auction && product.current_bid
-                  ? product.current_bid
-                  : product.price_per_unit
-                const firstImage = product.image_paths?.[0]
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {products.map((product) => {
+                const thumbUrl = getFirstImageUrl(product.image_paths)
+                const inStock = product.stock_quantity > 0
 
                 return (
                   <Link
                     key={product.id}
                     href={`/pembeli/produk/${product.id}`}
-                    className="group min-h-0"
+                    className="group border border-gray-100 rounded-sm overflow-hidden hover:shadow-md hover:border-[#ee4d2d]/30 transition-all"
                   >
-                    <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover-lift h-full flex flex-col">
-                      {/* Image */}
-                      <div className="relative aspect-[4/3] bg-gray-50">
-                        {firstImage ? (
-                          <img
-                            src={getImageUrl(firstImage)}
-                            alt={product.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-4xl">
-                            🌾
-                          </div>
-                        )}
-                        {product.is_auction && (
-                          <div className="absolute top-2 left-2">
-                            <Badge variant="warning" size="sm">🔨 Lelang</Badge>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Info */}
-                      <div className="p-3 flex flex-col gap-1 flex-1">
-                        <p className="font-semibold text-gray-900 text-[13px] line-clamp-2 leading-snug">
-                          {product.name}
-                        </p>
-                        <p className="text-[11px] text-gray-500">
-                          {CATEGORY_LABELS[product.category] ?? product.category}
-                        </p>
-                        <div className="mt-auto pt-2">
-                          <p className="font-bold text-green-700 text-[15px]">
-                            {formatRupiah(displayPrice)}
-                          </p>
-                          <p className="text-[11px] text-gray-400">per {product.unit}</p>
+                    {/* Thumbnail */}
+                    <div className="aspect-square bg-gray-100 overflow-hidden relative">
+                      {thumbUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={thumbUrl}
+                          alt={product.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-4xl">
+                          {seller.role === 'petani' ? '🌾' : '🚜'}
                         </div>
+                      )}
+                      {product.is_auction && (
+                        <span className="absolute top-2 left-2 bg-purple-500 text-white text-[10px] font-bold px-2 py-0.5 rounded">
+                          🔨 Lelang
+                        </span>
+                      )}
+                      {!inStock && (
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                          <span className="bg-white text-gray-800 text-xs font-bold px-3 py-1 rounded">
+                            Stok Habis
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Info */}
+                    <div className="p-3">
+                      <p className="text-sm text-gray-800 line-clamp-2 min-h-[2.5rem] mb-1">
+                        {getDisplayName(product.name, 'Produk')}
+                      </p>
+                      <p className="text-[#ee4d2d] font-bold text-base">
+                        {formatRupiah(product.price_per_unit)}
+                        <span className="text-gray-400 text-xs font-normal">
+                          {' '}/ {product.unit}
+                        </span>
+                      </p>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-[11px] text-gray-500 truncate">
+                          {CATEGORY_LABELS[product.category as keyof typeof CATEGORY_LABELS] ?? product.category}
+                        </span>
+                        {product.city && (
+                          <span className="text-[11px] text-gray-400 truncate ml-2">
+                            📍 {product.city}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </Link>
@@ -223,16 +286,6 @@ export default async function SellerProfilePage({ params }: Props) {
               })}
             </div>
           )}
-        </div>
-
-        {/* Back CTA */}
-        <div className="text-center py-4">
-          <Link
-            href="/pembeli/marketplace"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-white border-2 border-green-200 text-green-700 font-semibold text-[14px] rounded-2xl hover:bg-green-50 transition-colors shadow-sm min-h-0 touch-target-exempt"
-          >
-            ← Kembali ke Marketplace
-          </Link>
         </div>
       </div>
     </main>
