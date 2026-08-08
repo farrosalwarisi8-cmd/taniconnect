@@ -44,7 +44,7 @@ export function MarketplaceHeader({ query, activeCategory }: MarketplaceHeaderPr
   }
 
   return (
-    <header className="bg-white/95 backdrop-blur-md border-b border-gray-100 sticky top-[52px] z-30 shadow-sm">
+    <header className="bg-white/95 backdrop-blur-md border-b border-gray-100 sticky top-0 z-30 shadow-sm">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 space-y-3.5">
         {/* Top bar: Brand + Title + Profile Avatar */}
         <div className="flex items-center justify-between gap-3">

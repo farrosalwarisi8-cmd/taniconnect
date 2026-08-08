@@ -32,7 +32,7 @@ function formatRelativeTime(iso: string): string {
 export function InboxClient({ conversations }: { conversations: ConversationView[] }) {
   return (
     <main className="min-h-screen bg-gray-50 pb-24">
-      <header className="sticky top-[52px] z-30 bg-white border-b border-gray-200 shadow-sm">
+      <header className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
           <Link href="/pembeli/marketplace" className="text-gray-500 hover:text-primary-dark text-sm min-h-0">
             ← Marketplace

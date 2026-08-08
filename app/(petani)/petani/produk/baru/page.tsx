@@ -31,7 +31,7 @@ export default async function ProdukBaruPage() {
 
   return (
     <main className="min-h-screen bg-surface pb-24">
-      <header className="bg-white border-b border-border sticky top-[52px] z-30">
+      <header className="bg-white border-b border-border sticky top-0 z-30">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-3">
           <Link
             href="/petani/dashboard"
